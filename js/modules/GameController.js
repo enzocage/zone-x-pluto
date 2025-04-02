@@ -140,14 +140,23 @@ export class GameController {
         const geometry = new THREE.BoxGeometry(0.8, 0.1, 0.8);
         const material = new THREE.MeshLambertMaterial({ color: 0xff0000 });
         
+        // Genaue Raster-Koordinaten für den Exit festlegen
+        const exitGridX = 27;
+        const exitGridZ = 27;
+        
         this.exit = new THREE.Mesh(geometry, material);
-        this.exit.position.set(27, 0.5, 27);
+        // Präzise Positionierung auf den Rasterpunkt
+        this.exit.position.set(
+            exitGridX * CELL_SIZE + CELL_SIZE/2, // Exakte Rasterposition
+            0.5, 
+            exitGridZ * CELL_SIZE + CELL_SIZE/2  // Exakte Rasterposition
+        );
         this.exit.visible = false; // Erst sichtbar, wenn alle Plutonium abgeliefert wurde
         this.gameWorld.add(this.exit);
         
-        // Exit-Koordinaten
-        this.exit.gridX = 27;
-        this.exit.gridZ = 27;
+        // Exit-Koordinaten präzise speichern (ohne Nachkommastellen)
+        this.exit.gridX = exitGridX;
+        this.exit.gridZ = exitGridZ;
     }
     
     /**
@@ -351,8 +360,8 @@ export class GameController {
         
         // Prüfe Kollision mit Exit
         if (this.exit && this.exit.visible) {
-            if (this.player.gridX === Math.round(this.exit.gridX) && 
-                this.player.gridZ === Math.round(this.exit.gridZ)) {
+            if (this.player.gridX === this.exit.gridX && 
+                this.player.gridZ === this.exit.gridZ) {
                 console.log('Exit erreicht!');
                 
                 // Sound abspielen
@@ -481,7 +490,10 @@ export class GameController {
             // UI aktualisieren
             this.updateUI();
             
-            // Warnsound, wenn wenig Zeit übrig ist
+            // Tick-Tack-Sound für jede Sekunde
+            this.soundGenerator.playPlutoniumTimerTick(this.plutoniumTimerValue);
+            
+            // Zusätzlicher Warnsound bei 5 und weniger Sekunden
             if (this.plutoniumTimerValue <= 5) {
                 this.soundGenerator.playPlutoniumTimerWarning();
             }

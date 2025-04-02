@@ -169,6 +169,42 @@ export class SoundGenerator {
         oscillator.stop(this.audioContext.currentTime + 0.3);
     }
     
+    /**
+     * Erzeugt einen dramatischen Tick-Tack-Sound für den Plutonium-Timer
+     * @param {number} remainingTime - Die verbleibende Zeit in Sekunden
+     */
+    playPlutoniumTimerTick(remainingTime) {
+        if (this.muted) return;
+        
+        const oscillator = this.audioContext.createOscillator();
+        const gainNode = this.audioContext.createGain();
+        
+        // Frequenz und Lautstärke basierend auf verbleibender Zeit
+        let frequency = 440;
+        let volume = 0.15;
+        let duration = 0.1;
+        
+        // In den letzten 3 Sekunden wird der Sound dramatischer
+        if (remainingTime <= 3) {
+            // Höhere Frequenz und Lautstärke für mehr Dramatik
+            frequency = 550 + (3 - remainingTime) * 100; // Steigt bis zu 850 Hz
+            volume = 0.15 + (3 - remainingTime) * 0.1;   // Steigt bis zu 0.45
+            duration = 0.1 + (3 - remainingTime) * 0.05; // Längerer Ton
+        }
+        
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(frequency, this.audioContext.currentTime);
+        
+        gainNode.gain.setValueAtTime(volume, this.audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + duration);
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(this.masterGainNode);
+        
+        oscillator.start();
+        oscillator.stop(this.audioContext.currentTime + duration);
+    }
+    
     // ===== KOLLISIONSEREIGNISSE =====
     
     /**
