@@ -23,6 +23,12 @@ export class Player {
         this.isMoving = false;
         this.targetPosition = null;
         this.moveSpeed = PLAYER_MOVE_SPEED;
+        this.lastTime = performance.now();
+        this.lastSoundTime = 0; // Zeit der letzten Sound-Wiedergabe
+        this.movementSoundCooldown = 200; // Mindestabstand zwischen Bewegungs-Sounds in ms
+        
+        // Event-Callbacks
+        this.onMoveCallback = null;
         
         this.mesh = this.createMesh();
         this.addLightToPlayer();
@@ -70,50 +76,113 @@ export class Player {
     }
     
     /**
+     * Registriert einen Callback für Bewegungsereignisse
+     * @param {Function} callback - Die aufzurufende Funktion bei Bewegung
+     */
+    onMove(callback) {
+        this.onMoveCallback = callback;
+    }
+    
+    /**
      * Bewegt den Spieler (bzw. die Spielwelt um den Spieler herum)
-     * Prüft Kollisionen und bewegt den Spieler schrittweise zum Ziel
+     * Unterstützt kontinuierliche Bewegung über mehrere Rasterpunkte
      * @param {Function} isPositionOccupied - Callback-Funktion zum Prüfen, ob die Zielposition belegt ist
      * @param {Function} checkCollisions - Callback-Funktion zum Prüfen von Kollisionen mit Objekten
      */
     move(isPositionOccupied, checkCollisions) {
-        if (!this.isMoving) {
-            // Neue Bewegung starten, wenn keine aktive Bewegung vorhanden ist
-            if (this.moveDirection.x !== 0 || this.moveDirection.y !== 0) {
-                // Zielposition berechnen
-                const targetX = this.gridX + this.moveDirection.x;
-                const targetZ = this.gridZ + this.moveDirection.y;
-                
-                // Prüfen, ob Ziel nicht belegt ist
-                if (!isPositionOccupied(targetX, targetZ)) {
-                    this.isMoving = true;
-                    this.targetPosition = {
-                        x: -(targetX + CELL_SIZE/2),
-                        z: -(targetZ + CELL_SIZE/2)
-                    };
-                    
-                    // Grid-Position aktualisieren
-                    this.gridX = targetX;
-                    this.gridZ = targetZ;
-                }
-            }
-        } else {
+        // Zeitbasierte Bewegung für flüssige Animation
+        const currentTime = performance.now();
+        const deltaTime = (currentTime - this.lastTime) / 1000; // in Sekunden
+        this.lastTime = currentTime;
+        
+        // Geschwindigkeit an deltaTime anpassen für konsistente Bewegung
+        const frameSpeed = this.moveSpeed * deltaTime * 60; // Normalisieren auf 60 FPS
+        
+        // Falls wir uns bewegen und ein Ziel haben
+        if (this.isMoving && this.targetPosition) {
             // Aktuelle Bewegung fortsetzen - bewege die Welt, nicht den Spieler
             const dx = this.targetPosition.x - this.gameWorld.position.x;
             const dz = this.targetPosition.z - this.gameWorld.position.z;
             
-            // Wenn Ziel fast erreicht ist, Bewegung abschließen
-            if (Math.abs(dx) < 0.01 && Math.abs(dz) < 0.01) {
+            // Bewegungsdistanz für diesen Frame berechnen
+            const distanceThisFrame = Math.min(frameSpeed, Math.sqrt(dx * dx + dz * dz));
+            
+            // Sound-Wiedergabe prüfen mit Cooldown
+            if (this.onMoveCallback && currentTime - this.lastSoundTime > this.movementSoundCooldown) {
+                this.onMoveCallback();
+                this.lastSoundTime = currentTime;
+            }
+            
+            // Wenn Ziel fast erreicht ist
+            if (distanceThisFrame >= Math.sqrt(dx * dx + dz * dz)) {
+                // Position exakt auf Rasterpunkt setzen
                 this.gameWorld.position.x = this.targetPosition.x;
                 this.gameWorld.position.z = this.targetPosition.z;
-                this.isMoving = false;
-                this.targetPosition = null;
                 
                 // Kollisionsprüfung mit Objekten
                 checkCollisions();
+                
+                // Sofort prüfen, ob eine kontinuierliche Bewegung erfolgen soll
+                if (this.moveDirection.x !== 0 || this.moveDirection.y !== 0) {
+                    // Nächste Zielposition berechnen
+                    const nextTargetX = this.gridX + this.moveDirection.x;
+                    const nextTargetZ = this.gridZ + this.moveDirection.y;
+                    
+                    // Prüfen, ob nächstes Ziel verfügbar ist
+                    if (!isPositionOccupied(nextTargetX, nextTargetZ)) {
+                        // Grid-Position aktualisieren
+                        this.gridX = nextTargetX;
+                        this.gridZ = nextTargetZ;
+                        
+                        // Neue Zielposition setzen
+                        this.targetPosition = {
+                            x: -(nextTargetX + CELL_SIZE/2),
+                            z: -(nextTargetZ + CELL_SIZE/2)
+                        };
+                        // Bewegung fortsetzen (isMoving bleibt true)
+                    } else {
+                        // Hindernis gefunden, Bewegung stoppen
+                        this.isMoving = false;
+                        this.targetPosition = null;
+                    }
+                } else {
+                    // Keine Richtungstaste mehr gedrückt, Bewegung beenden
+                    this.isMoving = false;
+                    this.targetPosition = null;
+                }
             } else {
-                // Bewegung fortsetzen
-                this.gameWorld.position.x += dx * this.moveSpeed;
-                this.gameWorld.position.z += dz * this.moveSpeed;
+                // Bewegung fortsetzen mit normalisiertem Vektor für flüssige Bewegung
+                const totalDist = Math.sqrt(dx * dx + dz * dz);
+                const normalizedDx = dx / totalDist;
+                const normalizedDz = dz / totalDist;
+                
+                this.gameWorld.position.x += normalizedDx * distanceThisFrame;
+                this.gameWorld.position.z += normalizedDz * distanceThisFrame;
+            }
+        } 
+        // Neue Bewegung starten, wenn keine aktive Bewegung vorhanden ist
+        else if (!this.isMoving && (this.moveDirection.x !== 0 || this.moveDirection.y !== 0)) {
+            // Zielposition berechnen
+            const targetX = this.gridX + this.moveDirection.x;
+            const targetZ = this.gridZ + this.moveDirection.y;
+            
+            // Prüfen, ob Ziel nicht belegt ist
+            if (!isPositionOccupied(targetX, targetZ)) {
+                this.isMoving = true;
+                this.targetPosition = {
+                    x: -(targetX + CELL_SIZE/2),
+                    z: -(targetZ + CELL_SIZE/2)
+                };
+                
+                // Grid-Position aktualisieren
+                this.gridX = targetX;
+                this.gridZ = targetZ;
+                
+                // Bewegungs-Callback aufrufen
+                if (this.onMoveCallback) {
+                    this.onMoveCallback();
+                    this.lastSoundTime = currentTime;
+                }
             }
         }
     }

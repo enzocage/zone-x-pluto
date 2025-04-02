@@ -8,12 +8,15 @@ import {
     PLAYER_START_LIVES, 
     PLAYER_START_BLOCKS, 
     PLUTONIUM_TIMER, 
-    PLAYER_START_POSITION 
+    PLAYER_START_POSITION,
+    CELL_SIZE,
+    ENEMY_COLLISION_THRESHOLD
 } from '../config/config.js';
 import { Player } from '../entities/Player.js';
 import { LevelGenerator } from './LevelGenerator.js';
 import { PlacedBlock } from '../entities/Item.js';
 import { UIController } from './UIController.js';
+import { SoundGenerator } from './SoundGenerator.js';
 
 export class GameController {
     /**
@@ -52,6 +55,7 @@ export class GameController {
         // Hilfsobjekte
         this.levelGenerator = new LevelGenerator(this.gameWorld);
         this.uiController = new UIController();
+        this.soundGenerator = new SoundGenerator();
     }
     
     /**
@@ -61,6 +65,9 @@ export class GameController {
     init() {
         // UI initialisieren
         this.uiController.init();
+        
+        // Sound Generator initialisieren
+        this.soundGenerator.init();
         
         // Level generieren
         this.generateLevel(this.currentLevel);
@@ -118,6 +125,11 @@ export class GameController {
             PLAYER_START_POSITION.x, 
             PLAYER_START_POSITION.z
         );
+        
+        // Bewegungs-Sound-Callback registrieren
+        this.player.onMove(() => {
+            this.soundGenerator.playPlayerMove();
+        });
     }
     
     /**
@@ -184,12 +196,39 @@ export class GameController {
      * Lässt die Gegner autonom durch das Level wandern und prüft Kollisionen mit dem Spieler
      */
     moveEnemies() {
+        // Zuerst die Bewegung aller Gegner aktualisieren
         for (const enemy of this.enemies) {
             enemy.move(this.isPositionOccupied.bind(this), this.enemies);
             
             // Kollision mit Spieler prüfen
             if (enemy.checkCollisionWithPlayer(this.player)) {
+                this.soundGenerator.playEnemyCollision();
                 this.loseLife();
+            }
+        }
+        
+        // Anschließend auch kontinuierlich Kollisionen zwischen allen Gegnern prüfen
+        // Dies verbessert die Kollisionserkennung während der Bewegung
+        for (let i = 0; i < this.enemies.length; i++) {
+            for (let j = i + 1; j < this.enemies.length; j++) {
+                const enemy1 = this.enemies[i];
+                const enemy2 = this.enemies[j];
+                
+                // Kollidieren die Gegner miteinander?
+                const distX = Math.abs(enemy1.mesh.position.x - enemy2.mesh.position.x);
+                const distZ = Math.abs(enemy1.mesh.position.z - enemy2.mesh.position.z);
+                
+                if (distX < CELL_SIZE * ENEMY_COLLISION_THRESHOLD && 
+                    distZ < CELL_SIZE * ENEMY_COLLISION_THRESHOLD) {
+                    // Beide Gegner umdrehen lassen
+                    enemy1.reverseDirection();
+                    enemy2.reverseDirection();
+                    
+                    // Sound abspielen
+                    this.soundGenerator.playEnemyToEnemyCollision();
+                    
+                    console.log('Gegner-Kollision in GameController erkannt!');
+                }
             }
         }
     }
@@ -227,56 +266,100 @@ export class GameController {
      * Löst Aktionen wie Einsammeln, Timer-Steuerung und Levelabschluss aus
      */
     checkCollisions() {
-        // Kollision mit Plutonium
-        for (const plutonium of this.plutoniumItems) {
-            if (plutonium.checkCollisionWithPlayer(this.player)) {
-                plutonium.collect();
-                this.remainingPlutonium--;
-                this.plutoniumCollected = true;
+        // Prüfe Kollision mit Plutonium
+        for (let i = 0; i < this.plutoniumItems.length; i++) {
+            const item = this.plutoniumItems[i];
+            
+            if (this.player.gridX === item.gridX && this.player.gridZ === item.gridZ) {
+                console.log('Plutonium aufgesammelt!');
                 
-                // Timer starten
+                // Sound abspielen
+                this.soundGenerator.playPlutoniumPickup();
+                
+                // Plutonium entfernen
+                item.remove();
+                this.plutoniumItems.splice(i, 1);
+                i--;
+                
+                // Plutonium-Timer starten
                 this.startPlutoniumTimer();
                 
+                // Spielstatus aktualisieren
+                this.plutoniumCollected = true;
+                this.remainingPlutonium--;
+                this.playerScore += 100;
+                
+                // UI aktualisieren
                 this.updateUI();
+                
+                if (this.remainingPlutonium === 0) {
+                    this.activateExit();
+                }
+                
+                break;
             }
         }
         
-        // Kollision mit Tonnen (wenn Plutonium gesammelt wurde)
-        if (this.plutoniumCollected) {
-            for (const barrel of this.barrels) {
-                if (barrel.checkCollisionWithPlayer(this.player)) {
-                    this.plutoniumCollected = false;
-                    this.playerScore += 100;
+        // Prüfe Kollision mit Fässern/Tonnen
+        for (let i = 0; i < this.barrels.length; i++) {
+            const barrel = this.barrels[i];
+            
+            if (this.player.gridX === barrel.gridX && this.player.gridZ === barrel.gridZ) {
+                console.log('Tonne erreicht!');
+                
+                if (this.plutoniumCollected) {
+                    // Plutonium in Fass entsorgen
+                    this.soundGenerator.playPlutoniumPickup(); // Hier könnte ein eigener Sound sein
                     
-                    // Timer stoppen
                     this.stopPlutoniumTimer();
+                    this.plutoniumCollected = false;
+                    this.playerScore += 200;
                     
-                    // Wenn alle Plutonium-Proben abgeliefert wurden, Exit aktivieren
-                    if (this.remainingPlutonium === 0) {
-                        this.activateExit();
-                    }
-                    
+                    // UI aktualisieren
                     this.updateUI();
                 }
+                
+                break;
             }
         }
         
-        // Kollision mit sammelbaren Blocks
-        for (let i = this.collectibleBlocks.length - 1; i >= 0; i--) {
+        // Prüfe Kollision mit einsammelbaren Blöcken
+        for (let i = 0; i < this.collectibleBlocks.length; i++) {
             const block = this.collectibleBlocks[i];
-            if (block.checkCollisionWithPlayer(this.player)) {
-                block.collect();
+            
+            if (this.player.gridX === block.gridX && this.player.gridZ === block.gridZ) {
+                console.log('Block aufgesammelt!');
+                
+                // Sound abspielen
+                this.soundGenerator.playBlockPickup();
+                
+                // Block entfernen
+                block.remove();
                 this.collectibleBlocks.splice(i, 1);
+                i--;
+                
+                // Block dem Spieler hinzufügen
                 this.playerBlocks++;
+                this.playerScore += 50;
+                
+                // UI aktualisieren
                 this.updateUI();
+                
+                break;
             }
         }
         
-        // Kollision mit Exit (wenn alle Plutonium-Proben abgeliefert wurden)
-        if (this.remainingPlutonium === 0 && 
-            this.player.gridX === this.exit.gridX && 
-            this.player.gridZ === this.exit.gridZ) {
-            this.completeLevel();
+        // Prüfe Kollision mit Exit
+        if (this.exit && this.exit.visible) {
+            if (this.player.gridX === Math.round(this.exit.gridX) && 
+                this.player.gridZ === Math.round(this.exit.gridZ)) {
+                console.log('Exit erreicht!');
+                
+                // Sound abspielen
+                this.soundGenerator.playLevelComplete();
+                
+                this.completeLevel();
+            }
         }
     }
     
@@ -312,30 +395,40 @@ export class GameController {
     }
     
     /**
-     * Platziert einen Block
-     * Erstellt einen Block hinter dem Spieler, wenn verfügbar und die Position frei ist
+     * Platziert einen Block an der aktuellen Spieler-Position
+     * Kann verwendet werden, um Wege zu blockieren oder Gegner einzusperren
      */
     placeBlock() {
-        if (this.playerBlocks <= 0) return;
+        // Prüfen, ob der Spieler überhaupt Blöcke hat
+        if (this.playerBlocks <= 0) {
+            console.log('Keine Blöcke mehr verfügbar!');
+            return;
+        }
         
-        // Position hinter dem Spieler berechnen
-        let blockX = this.player.gridX;
-        let blockZ = this.player.gridZ;
+        // Prüfen, ob an der aktuellen Position bereits ein Block ist
+        const targetPos = { x: this.player.gridX, z: this.player.gridZ };
         
-        if (this.player.moveDirection.x > 0) blockX--;
-        else if (this.player.moveDirection.x < 0) blockX++;
-        else if (this.player.moveDirection.y > 0) blockZ--;
-        else if (this.player.moveDirection.y < 0) blockZ++;
-        else return; // Keine Richtung, kein Block
+        for (const block of this.blocks) {
+            if (block.gridX === targetPos.x && block.gridZ === targetPos.z) {
+                console.log('Hier steht bereits ein Block!');
+                return;
+            }
+        }
         
-        // Prüfen, ob Position frei ist
-        if (this.isPositionOccupied(blockX, blockZ)) return;
+        // Block platzieren
+        console.log('Block platziert!');
         
-        // Block erstellen
-        this.blocks.push(new PlacedBlock(this.gameWorld, blockX, blockZ));
+        // Sound abspielen
+        this.soundGenerator.playBlockPlace();
         
-        // Block abziehen
+        // Block-Objekt erstellen
+        const block = new PlacedBlock(this.gameWorld, targetPos.x, targetPos.z);
+        this.blocks.push(block);
+        
+        // Block vom Inventar abziehen
         this.playerBlocks--;
+        
+        // UI aktualisieren
         this.updateUI();
     }
     
@@ -344,38 +437,60 @@ export class GameController {
      * Bei Lebensverlust wird der Spieler zurückgesetzt oder das Spiel beendet
      */
     loseLife() {
+        // Leben abziehen
         this.playerLives--;
+        console.log('Leben verloren! Verbleibende Leben: ' + this.playerLives);
+        
+        // Sound abspielen
+        this.soundGenerator.playLifeLost();
+        
+        // Plutonium zurücksetzen, falls getragen
+        if (this.plutoniumCollected) {
+            this.stopPlutoniumTimer();
+            this.plutoniumCollected = false;
+        }
+        
+        // UI aktualisieren
         this.updateUI();
         
+        // Spieler zurücksetzen
+        this.player.reset(PLAYER_START_POSITION.x, PLAYER_START_POSITION.z);
+        
+        // Prüfen, ob das Spiel verloren ist
         if (this.playerLives <= 0) {
-            // Game Over
-            alert("Game Over! Punkte: " + this.playerScore);
+            this.soundGenerator.playGameOver();
             this.resetGame();
-        } else {
-            // Spieler zurücksetzen
-            this.player.reset(PLAYER_START_POSITION.x, PLAYER_START_POSITION.z);
         }
     }
     
     /**
      * Startet den Plutonium-Timer
-     * Startet einen Countdown, nachdem Plutonium eingesammelt wurde
-     * Verringert den Timer-Wert sekündlich und löst Lebensverlust aus, wenn der Timer abläuft
+     * Zählt herunter, bis das Plutonium entsorgt werden muss
      */
     startPlutoniumTimer() {
+        // Vorherigen Timer löschen, falls vorhanden
         this.stopPlutoniumTimer();
         
+        // Timer-Wert zurücksetzen
         this.plutoniumTimerValue = PLUTONIUM_TIMER;
+        
+        // Neuen Timer starten
         this.plutoniumTimer = setInterval(() => {
             this.plutoniumTimerValue--;
             
+            // UI aktualisieren
+            this.updateUI();
+            
+            // Warnsound, wenn wenig Zeit übrig ist
+            if (this.plutoniumTimerValue <= 5) {
+                this.soundGenerator.playPlutoniumTimerWarning();
+            }
+            
+            // Zeit abgelaufen
             if (this.plutoniumTimerValue <= 0) {
                 this.stopPlutoniumTimer();
                 this.loseLife();
-                this.plutoniumCollected = false;
             }
-            
-            this.updateUI();
         }, 1000);
     }
     
@@ -421,53 +536,74 @@ export class GameController {
     }
     
     /**
-     * Behandelt Tastendruck-Events
-     * Setzt die Bewegungsrichtung des Spielers basierend auf den WASD-Tasten
-     * Löst Blockplatzierung bei Leertaste aus
-     * @param {Object} event - Das Tastendruck-Event
+     * Behandelt Tastendruck-Ereignisse
+     * @param {KeyboardEvent} event - Das Tastatur-Event
      */
     onKeyDown(event) {
+        // Nur reagieren, wenn Level nicht abgeschlossen ist
+        if (this.levelCompleted) return;
+        
         switch (event.key) {
+            case 'ArrowUp':
             case 'w':
-            case 'W':
                 this.player.setMoveDirection(0, -1);
                 break;
+            case 'ArrowDown':
             case 's':
-            case 'S':
                 this.player.setMoveDirection(0, 1);
                 break;
+            case 'ArrowLeft':
             case 'a':
-            case 'A':
                 this.player.setMoveDirection(-1, 0);
                 break;
+            case 'ArrowRight':
             case 'd':
-            case 'D':
                 this.player.setMoveDirection(1, 0);
                 break;
             case ' ':
                 this.placeBlock();
                 break;
+            case 'm':
+                // Sound ein-/ausschalten
+                const muted = !this.soundGenerator.muted;
+                this.soundGenerator.setMuted(muted);
+                console.log('Sound ' + (muted ? 'aus' : 'ein'));
+                break;
         }
     }
     
     /**
-     * Behandelt Tastenloslassen-Events
-     * Stoppt die Bewegung des Spielers, wenn eine Richtungstaste losgelassen wird
-     * @param {Object} event - Das Tastenloslassen-Event
+     * Behandelt Tastenloslassung-Ereignisse
+     * @param {KeyboardEvent} event - Das Tastatur-Event
      */
     onKeyUp(event) {
+        // Nur reagieren, wenn Level nicht abgeschlossen ist
+        if (this.levelCompleted) return;
+        
         switch (event.key) {
-            case 'q':
-            case 'Q':
-            case 's':
-            case 'S':
-                this.player.setMoveDirection(0, 0);
+            case 'ArrowUp':
+            case 'w':
+                if (this.player.moveDirection.y === -1) {
+                    this.player.setMoveDirection(0, 0);
+                }
                 break;
+            case 'ArrowDown':
+            case 's':
+                if (this.player.moveDirection.y === 1) {
+                    this.player.setMoveDirection(0, 0);
+                }
+                break;
+            case 'ArrowLeft':
             case 'a':
-            case 'A':
+                if (this.player.moveDirection.x === -1) {
+                    this.player.setMoveDirection(0, 0);
+                }
+                break;
+            case 'ArrowRight':
             case 'd':
-            case 'D':
-                this.player.setMoveDirection(0, 0);
+                if (this.player.moveDirection.x === 1) {
+                    this.player.setMoveDirection(0, 0);
+                }
                 break;
         }
     }

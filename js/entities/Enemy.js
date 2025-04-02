@@ -74,6 +74,24 @@ export class Enemy {
     move(isPositionOccupied, enemies) {
         // Wenn Gegner aktuell nicht in Bewegung ist, setze neues Ziel
         if (!this.isMoving) {
+            // Zeit-basierte kleine Zufallsänderungen, um Synchronisierungen zu verhindern
+            if (!this.lastChangeTime) {
+                this.lastChangeTime = Date.now();
+            } else if (Date.now() - this.lastChangeTime > 5000) {
+                // Alle 5 Sekunden eine kleine Zufallsänderung
+                this.lastChangeTime = Date.now();
+                if (Math.random() > 0.7) {
+                    // 30% Chance die Richtung zu ändern
+                    const directions = [
+                        { x: 1, z: 0 },
+                        { x: -1, z: 0 },
+                        { x: 0, z: 1 },
+                        { x: 0, z: -1 }
+                    ];
+                    this.direction = directions[Math.floor(Math.random() * directions.length)];
+                }
+            }
+            
             // Nächste Grid-Position berechnen
             const nextGridX = this.gridX + this.direction.x;
             const nextGridZ = this.gridZ + this.direction.z;
@@ -92,13 +110,39 @@ export class Enemy {
                 this.lastDirection = { ... this.direction };
                 this.direction = directions[Math.floor(Math.random() * directions.length)];
             } else {
-                // Speichern der letzten Richtung
-                this.lastDirection = { ... this.direction };
+                // Prüfen, ob ein anderer Gegner auf dem Weg zum nächsten Feld ist
+                const isEnemyMovingTowardsNextCell = this.checkForApproachingEnemies(nextGridX, nextGridZ, enemies);
                 
-                // Bewegung starten
-                this.targetX = nextGridX;
-                this.targetZ = nextGridZ;
-                this.isMoving = true;
+                if (isEnemyMovingTowardsNextCell) {
+                    // Kurz warten und versuchen, Kollision zu vermeiden
+                    this.isMoving = false;
+                    
+                    // Kurze Verzögerung oder andere Richtung wählen
+                    if (Math.random() > 0.5) {
+                        // Andere Richtung wählen
+                        const directions = [
+                            { x: 1, z: 0 },
+                            { x: -1, z: 0 },
+                            { x: 0, z: 1 },
+                            { x: 0, z: -1 }
+                        ].filter(dir => 
+                            !(dir.x === this.direction.x && dir.z === this.direction.z)
+                        );
+                        
+                        if (directions.length > 0) {
+                            this.lastDirection = { ... this.direction };
+                            this.direction = directions[Math.floor(Math.random() * directions.length)];
+                        }
+                    }
+                } else {
+                    // Speichern der letzten Richtung
+                    this.lastDirection = { ... this.direction };
+                    
+                    // Bewegung starten
+                    this.targetX = nextGridX;
+                    this.targetZ = nextGridZ;
+                    this.isMoving = true;
+                }
             }
         }
         
@@ -145,6 +189,32 @@ export class Enemy {
     }
     
     /**
+     * Prüft, ob ein anderer Gegner sich auf die gleiche Zielposition zubewegt
+     * Verhindert Kollisionen, bevor sie passieren
+     * @param {number} targetX - Ziel-X-Position
+     * @param {number} targetZ - Ziel-Z-Position
+     * @param {Array} enemies - Liste aller Gegner
+     * @returns {boolean} - true, wenn ein Gegner sich auf die gleiche Position zubewegt
+     */
+    checkForApproachingEnemies(targetX, targetZ, enemies) {
+        for (const enemy of enemies) {
+            if (enemy === this) continue;
+            
+            // Prüfen, ob der andere Gegner sich auf dieselbe Zielposition zubewegt
+            if (enemy.isMoving && enemy.targetX === targetX && enemy.targetZ === targetZ) {
+                return true;
+            }
+            
+            // Prüfen, ob der andere Gegner bereits auf der Zielposition steht
+            if (enemy.gridX === targetX && enemy.gridZ === targetZ && !enemy.isMoving) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
      * Prüft Kollision mit einem Spieler
      * @param {Object} player - Spieler-Objekt zum Prüfen der Kollision
      * @returns {boolean} - true, wenn eine Kollision erkannt wurde
@@ -157,16 +227,17 @@ export class Enemy {
         }
         
         // Methode 2: Kontinuierliche Kollisionserkennung für Bewegung zwischen Rasterpunkten
-        // Tatsächliche Spielerposition in Welt-Koordinaten (unter Berücksichtigung der Spielwelt-Verschiebung)
-        const playerWorldX = -this.gameWorld.position.x - CELL_SIZE/2;
-        const playerWorldZ = -this.gameWorld.position.z - CELL_SIZE/2;
+        // Korrektur: Tatsächliche Spielerposition nutzen statt nur gameWorld-Position
+        // Wir nehmen an, dass player.mesh die tatsächliche Position des Spielers enthält
+        const playerWorldX = player.mesh.position.x;
+        const playerWorldZ = player.mesh.position.z;
         
-        // Jetzt können wir den richtigen Abstand berechnen
+        // Berechnung des tatsächlichen Abstands zwischen Spieler und Gegner
         const distX = Math.abs(playerWorldX - this.mesh.position.x);
         const distZ = Math.abs(playerWorldZ - this.mesh.position.z);
         
-        // Kollisionsschwellwert für Spielerkollision
-        const collisionThreshold = CELL_SIZE * 0.7;
+        // Kleinerer Kollisionsschwellwert für genauere Kollisionserkennung
+        const collisionThreshold = CELL_SIZE * 0.4;
         
         if (distX < collisionThreshold && distZ < collisionThreshold) {
             console.log('Kontinuierliche Kollision zwischen Spieler und Gegner!');
@@ -183,6 +254,8 @@ export class Enemy {
      * @returns {boolean} - true, wenn eine Kollision erkannt wurde
      */
     checkCollisionWithEnemies(enemies) {
+        let collisionDetected = false;
+        
         for (const otherEnemy of enemies) {
             // Eigene Kollision ignorieren
             if (otherEnemy === this) continue;
@@ -190,10 +263,14 @@ export class Enemy {
             // Prüfe, ob beide auf der gleichen Grid-Position sind
             if (this.gridX === otherEnemy.gridX && this.gridZ === otherEnemy.gridZ) {
                 console.log('Kollision zwischen Gegnern erkannt!');
-                // Beide Gegner sollen umkehren
-                this.reverseDirection();
-                otherEnemy.reverseDirection();
-                return true;
+                
+                // Aktiv trennen statt nur Richtung umkehren
+                this.separateEnemies(otherEnemy);
+                
+                // Unterschiedliche neue Richtungen wählen
+                this.chooseNewDirection(otherEnemy);
+                
+                collisionDetected = true;
             }
             
             // Prüfe auch auf Kollision während der Bewegung (wenn beide in Bewegung sind)
@@ -205,13 +282,67 @@ export class Enemy {
                 if (distX < CELL_SIZE * ENEMY_COLLISION_THRESHOLD && 
                     distZ < CELL_SIZE * ENEMY_COLLISION_THRESHOLD) {
                     console.log('Bewegungskollision zwischen Gegnern erkannt!');
-                    this.reverseDirection();
-                    otherEnemy.reverseDirection();
-                    return true;
+                    
+                    // Aktiv trennen
+                    this.separateEnemies(otherEnemy);
+                    
+                    // Unterschiedliche neue Richtungen wählen
+                    this.chooseNewDirection(otherEnemy);
+                    
+                    collisionDetected = true;
                 }
             }
         }
-        return false;
+        
+        return collisionDetected;
+    }
+    
+    /**
+     * Wählt eine neue Richtung, die sich von der des anderen Gegners unterscheidet
+     * @param {Enemy} otherEnemy - Der andere Gegner
+     */
+    chooseNewDirection(otherEnemy) {
+        // Mögliche Richtungen
+        const directions = [
+            { x: 1, z: 0 },  // rechts
+            { x: -1, z: 0 }, // links
+            { x: 0, z: 1 },  // unten
+            { x: 0, z: -1 }  // oben
+        ];
+        
+        // Entferne aktuelle Richtungen beider Gegner aus den Optionen
+        const filteredDirections = directions.filter(dir => 
+            !(dir.x === this.direction.x && dir.z === this.direction.z) && 
+            !(dir.x === otherEnemy.direction.x && dir.z === otherEnemy.direction.z)
+        );
+        
+        // Wenn es noch Optionen gibt, wähle neue Richtungen
+        if (filteredDirections.length > 0) {
+            // Wähle zufällige Richtung für diesen Gegner
+            const myNewDir = filteredDirections[Math.floor(Math.random() * filteredDirections.length)];
+            this.direction = { ...myNewDir };
+            
+            // Entferne diese Richtung aus den Optionen für den anderen Gegner
+            const remainingDirs = filteredDirections.filter(dir => 
+                !(dir.x === myNewDir.x && dir.z === myNewDir.z)
+            );
+            
+            if (remainingDirs.length > 0) {
+                // Wähle eine andere Richtung für den anderen Gegner
+                const otherNewDir = remainingDirs[Math.floor(Math.random() * remainingDirs.length)];
+                otherEnemy.direction = { ...otherNewDir };
+            } else {
+                otherEnemy.reverseDirection();
+            }
+        } else {
+            // Fallback: Beide Gegner umkehren
+            this.reverseDirection();
+            otherEnemy.reverseDirection();
+        }
+        
+        // Beide Gegner stoppen
+        this.isMoving = false;
+        otherEnemy.isMoving = false;
     }
     
     /**
@@ -225,7 +356,52 @@ export class Enemy {
             z: -this.lastDirection.z
         };
         
+        // Zufällige kleine Variation hinzufügen, um Verhakungen zu vermeiden
+        if (Math.random() > 0.5) {
+            this.direction.x += (Math.random() > 0.5 ? 0.1 : -0.1);
+        } else {
+            this.direction.z += (Math.random() > 0.5 ? 0.1 : -0.1);
+        }
+        
+        // Richtung normalisieren
+        const length = Math.sqrt(this.direction.x * this.direction.x + this.direction.z * this.direction.z);
+        if (length > 0) {
+            this.direction.x /= length;
+            this.direction.z /= length;
+        }
+        
         // Bewegung stoppen, falls der Gegner gerade in Bewegung ist
         this.isMoving = false;
+    }
+    
+    /**
+     * Trennt zwei Gegner aktiv voneinander
+     * @param {Enemy} otherEnemy - Der andere Gegner
+     */
+    separateEnemies(otherEnemy) {
+        // Berechne Richtungsvektor zwischen den zwei Gegnern
+        const dirX = this.mesh.position.x - otherEnemy.mesh.position.x;
+        const dirZ = this.mesh.position.z - otherEnemy.mesh.position.z;
+        
+        // Normalisiere den Richtungsvektor
+        const length = Math.sqrt(dirX * dirX + dirZ * dirZ);
+        const normDirX = length > 0 ? dirX / length : 0;
+        const normDirZ = length > 0 ? dirZ / length : 0;
+        
+        // Bewege beide Gegner leicht auseinander
+        const separationDistance = CELL_SIZE * 0.1;
+        
+        this.mesh.position.x += normDirX * separationDistance;
+        this.mesh.position.z += normDirZ * separationDistance;
+        
+        otherEnemy.mesh.position.x -= normDirX * separationDistance;
+        otherEnemy.mesh.position.z -= normDirZ * separationDistance;
+        
+        // Aktualisiere die Grid-Positionen basierend auf der tatsächlichen Weltposition
+        this.gridX = Math.floor(this.mesh.position.x / CELL_SIZE);
+        this.gridZ = Math.floor(this.mesh.position.z / CELL_SIZE);
+        
+        otherEnemy.gridX = Math.floor(otherEnemy.mesh.position.x / CELL_SIZE);
+        otherEnemy.gridZ = Math.floor(otherEnemy.mesh.position.z / CELL_SIZE);
     }
 } 
