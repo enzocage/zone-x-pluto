@@ -162,7 +162,7 @@ describe('GameController', () => {
         };
         
         // Verschiedene Tasten testen
-        gameController.onKeyDown({ key: 'q' });
+        gameController.onKeyDown({ key: 'w' });
         expect(gameController.player.setMoveDirection).toHaveBeenCalledWith(0, -1);
         
         gameController.onKeyDown({ key: 's' });

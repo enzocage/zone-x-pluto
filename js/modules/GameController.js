@@ -170,7 +170,7 @@ export class GameController {
      */
     moveEnemies() {
         for (const enemy of this.enemies) {
-            enemy.move(this.isPositionOccupied.bind(this));
+            enemy.move(this.isPositionOccupied.bind(this), this.enemies);
             
             // Kollision mit Spieler prüfen
             if (enemy.checkCollisionWithPlayer(this.player)) {
@@ -191,13 +191,6 @@ export class GameController {
         // Wände prüfen
         for (const wall of this.walls) {
             if (wall.gridX === x && wall.gridZ === z) {
-                return true;
-            }
-        }
-        
-        // Tonnen prüfen
-        for (const barrel of this.barrels) {
-            if (barrel.gridX === x && barrel.gridZ === z) {
                 return true;
             }
         }

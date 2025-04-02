@@ -18,7 +18,7 @@ export class LevelGenerator {
      */
     generateLevel(level, walls, enemies, plutoniumItems, barrels, collectibleBlocks) {
         // Parameter basierend auf Level anpassen
-        const enemyCount = Math.floor(7 * Math.pow(0.2, level - 1));
+        const enemyCount = Math.floor(7 * Math.pow(0.2  , level - 1));
         const wallRatio = WALL_RATIO * Math.pow(0.2, level - 1);
         
         // Spielfeld umranden mit Wänden
@@ -203,12 +203,12 @@ export class LevelGenerator {
             }
         }
         
-        // Tonnen prüfen
-        for (const barrel of barrels) {
-            if (barrel.gridX === x && barrel.gridZ === z) {
-                return true;
-            }
-        }
+        // Tonnen nicht mehr prüfen, damit Spieler Tonnen betreten kann
+        // for (const barrel of barrels) {
+        //    if (barrel.gridX === x && barrel.gridZ === z) {
+        //        return true;
+        //    }
+        // }
         
         // Platzierte Blocks prüfen
         for (const block of blocks) {
