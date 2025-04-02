@@ -4,7 +4,7 @@
  * Der Gegner bewegt sich autonom durch das Level und verfolgt eigene Bewegungsmuster
  */
 
-import { CELL_SIZE, ENEMY_MIN_SPEED, ENEMY_SPEED_VARIATION } from '../config/config.js';
+import { CELL_SIZE, ENEMY_MIN_SPEED, ENEMY_SPEED_VARIATION, ENEMY_COLLISION_THRESHOLD } from '../config/config.js';
 
 export class Enemy {
     /**
@@ -150,10 +150,30 @@ export class Enemy {
      * @returns {boolean} - true, wenn eine Kollision erkannt wurde
      */
     checkCollisionWithPlayer(player) {
-        const distX = Math.abs(player.mesh.position.x - this.mesh.position.x);
-        const distZ = Math.abs(player.mesh.position.z - this.mesh.position.z);
+        // Methode 1: Grid-basierte Kollisionserkennung (für präzise Raster-Positionen)
+        if (player.gridX === this.gridX && player.gridZ === this.gridZ) {
+            console.log('Grid-Kollision zwischen Spieler und Gegner!');
+            return true;
+        }
         
-        return (distX < CELL_SIZE * 0.7 && distZ < CELL_SIZE * 0.7);
+        // Methode 2: Kontinuierliche Kollisionserkennung für Bewegung zwischen Rasterpunkten
+        // Tatsächliche Spielerposition in Welt-Koordinaten (unter Berücksichtigung der Spielwelt-Verschiebung)
+        const playerWorldX = -this.gameWorld.position.x - CELL_SIZE/2;
+        const playerWorldZ = -this.gameWorld.position.z - CELL_SIZE/2;
+        
+        // Jetzt können wir den richtigen Abstand berechnen
+        const distX = Math.abs(playerWorldX - this.mesh.position.x);
+        const distZ = Math.abs(playerWorldZ - this.mesh.position.z);
+        
+        // Kollisionsschwellwert für Spielerkollision
+        const collisionThreshold = CELL_SIZE * 0.7;
+        
+        if (distX < collisionThreshold && distZ < collisionThreshold) {
+            console.log('Kontinuierliche Kollision zwischen Spieler und Gegner!');
+            return true;
+        }
+        
+        return false;
     }
     
     /**
@@ -169,10 +189,26 @@ export class Enemy {
             
             // Prüfe, ob beide auf der gleichen Grid-Position sind
             if (this.gridX === otherEnemy.gridX && this.gridZ === otherEnemy.gridZ) {
+                console.log('Kollision zwischen Gegnern erkannt!');
                 // Beide Gegner sollen umkehren
                 this.reverseDirection();
                 otherEnemy.reverseDirection();
                 return true;
+            }
+            
+            // Prüfe auch auf Kollision während der Bewegung (wenn beide in Bewegung sind)
+            if (this.isMoving && otherEnemy.isMoving) {
+                const distX = Math.abs(this.mesh.position.x - otherEnemy.mesh.position.x);
+                const distZ = Math.abs(this.mesh.position.z - otherEnemy.mesh.position.z);
+                
+                // Verbesserte Kollisionserkennung mit neuem Schwellenwert
+                if (distX < CELL_SIZE * ENEMY_COLLISION_THRESHOLD && 
+                    distZ < CELL_SIZE * ENEMY_COLLISION_THRESHOLD) {
+                    console.log('Bewegungskollision zwischen Gegnern erkannt!');
+                    this.reverseDirection();
+                    otherEnemy.reverseDirection();
+                    return true;
+                }
             }
         }
         return false;
