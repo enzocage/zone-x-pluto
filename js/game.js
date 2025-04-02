@@ -1,20 +1,22 @@
 /**
  * Hauptspiel-Klasse
- * Einstiegspunkt für das Spiel, initialisiert Three.js und steuert den Spielablauf
+ * Einstiegspunkt für das Spiel, initialisiert Three.js und steuert den Spielablauf.
+ * Verantwortlich für die Einrichtung der 3D-Umgebung und der Spielschleife.
  */
 
 import { GameController } from './modules/GameController.js';
 
 export class Game {
     constructor() {
-        this.scene = null;
-        this.camera = null;
-        this.renderer = null;
-        this.gameController = null;
+        this.scene = null;       // Three.js-Szene
+        this.camera = null;      // Kamera-Objekt
+        this.renderer = null;    // Three.js-Renderer
+        this.gameController = null; // Spielsteuerung
     }
     
     /**
      * Initialisiert das Spiel
+     * Richtet Three.js ein, erstellt die Beleuchtung und startet den GameController.
      */
     init() {
         // Three.js-Setup
@@ -37,6 +39,7 @@ export class Game {
     
     /**
      * Richtet Three.js ein
+     * Erstellt die 3D-Szene, Kamera und den WebGL-Renderer.
      */
     setupThreeJs() {
         // Szene erstellen
@@ -56,6 +59,7 @@ export class Game {
     
     /**
      * Fügt Beleuchtung zur Szene hinzu
+     * Erstellt ein ambientes Licht für Grundbeleuchtung und ein direktionales Licht für Schatten.
      */
     addLights() {
         // Ambientes Licht
@@ -70,6 +74,7 @@ export class Game {
     
     /**
      * Animationsschleife
+     * Wird für jeden Frame aufgerufen, aktualisiert die Spiellogik und rendert die Szene.
      */
     animate() {
         requestAnimationFrame(this.animate.bind(this));
@@ -85,6 +90,7 @@ export class Game {
     
     /**
      * Behandelt Fenstergrößenänderungen
+     * Passt Kamera und Renderer an die neue Fenstergröße an.
      */
     onWindowResize() {
         this.camera.aspect = window.innerWidth / window.innerHeight;
@@ -94,6 +100,7 @@ export class Game {
     
     /**
      * Behandelt Mausrad-Events für Zoom
+     * Ermöglicht dem Spieler, mit dem Mausrad in die Szene hinein- und herauszuzoomen.
      */
     onMouseWheel(event) {
         const zoomSpeed = 0.1;

@@ -1,11 +1,19 @@
 /**
  * Spieler-Klasse
  * Repräsentiert den Spieler im Spiel
+ * Verantwortlich für die Steuerung und Bewegung des Spieler-Charakters
  */
 
 import { CELL_SIZE, PLAYER_MOVE_SPEED } from '../config/config.js';
 
 export class Player {
+    /**
+     * Erstellt eine neue Spieler-Instanz
+     * @param {Object} scene - Three.js-Szene, in der der Spieler gerendert wird
+     * @param {Object} gameWorld - Die Spielwelt-Gruppe, die um den Spieler bewegt wird
+     * @param {number} gridX - Startposition auf der X-Achse des Grids
+     * @param {number} gridZ - Startposition auf der Z-Achse des Grids
+     */
     constructor(scene, gameWorld, gridX, gridZ) {
         this.gridX = gridX;
         this.gridZ = gridZ;
@@ -22,6 +30,8 @@ export class Player {
     
     /**
      * Erstellt das 3D-Mesh für den Spieler
+     * Erzeugt einen grünen Würfel, der den Spieler darstellt
+     * @returns {Object} - Das erstellte Three.js-Mesh
      */
     createMesh() {
         const geometry = new THREE.BoxGeometry(CELL_SIZE * 0.8, CELL_SIZE * 0.8, CELL_SIZE * 0.8);
@@ -40,6 +50,7 @@ export class Player {
     
     /**
      * Fügt dem Spieler ein Licht hinzu
+     * Erzeugt ein Punktlicht, das der Spieler mit sich führt, um die Umgebung zu beleuchten
      */
     addLightToPlayer() {
         const light = new THREE.PointLight(0xffffff, 1, 20);
@@ -49,6 +60,9 @@ export class Player {
     
     /**
      * Setzt die Bewegungsrichtung des Spielers
+     * Wird von den Tastatur-Event-Handlern aufgerufen
+     * @param {number} x - X-Komponente der Bewegungsrichtung (-1, 0, 1)
+     * @param {number} y - Y-Komponente der Bewegungsrichtung (-1, 0, 1)
      */
     setMoveDirection(x, y) {
         this.moveDirection.x = x;
@@ -57,6 +71,9 @@ export class Player {
     
     /**
      * Bewegt den Spieler (bzw. die Spielwelt um den Spieler herum)
+     * Prüft Kollisionen und bewegt den Spieler schrittweise zum Ziel
+     * @param {Function} isPositionOccupied - Callback-Funktion zum Prüfen, ob die Zielposition belegt ist
+     * @param {Function} checkCollisions - Callback-Funktion zum Prüfen von Kollisionen mit Objekten
      */
     move(isPositionOccupied, checkCollisions) {
         if (!this.isMoving) {
@@ -103,6 +120,9 @@ export class Player {
     
     /**
      * Setzt den Spieler zurück an die Startposition
+     * Wird nach Lebensverlust oder Level-Wechsel aufgerufen
+     * @param {number} startX - X-Koordinate der Startposition
+     * @param {number} startZ - Z-Koordinate der Startposition
      */
     reset(startX, startZ) {
         this.gridX = startX;

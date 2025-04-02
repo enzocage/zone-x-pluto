@@ -1,11 +1,18 @@
 /**
  * Gegner-Klasse
  * Repräsentiert einen Gegner im Spiel
+ * Der Gegner bewegt sich autonom durch das Level und verfolgt eigene Bewegungsmuster
  */
 
 import { CELL_SIZE, ENEMY_MIN_SPEED, ENEMY_SPEED_VARIATION } from '../config/config.js';
 
 export class Enemy {
+    /**
+     * Erstellt einen neuen Gegner
+     * @param {Object} gameWorld - Die Spielwelt-Gruppe, in der der Gegner platziert wird
+     * @param {number} gridX - Startposition auf der X-Achse des Grids
+     * @param {number} gridZ - Startposition auf der Z-Achse des Grids
+     */
     constructor(gameWorld, gridX, gridZ) {
         this.gridX = gridX;
         this.gridZ = gridZ;
@@ -22,6 +29,8 @@ export class Enemy {
     
     /**
      * Erstellt das 3D-Mesh für den Gegner
+     * Erzeugt einen roten Würfel, der den Gegner darstellt
+     * @returns {Object} - Das erstellte Three.js-Mesh
      */
     createMesh() {
         // Würfel statt Kugel verwenden
@@ -41,6 +50,8 @@ export class Enemy {
     
     /**
      * Gibt eine zufällige Bewegungsrichtung zurück
+     * Wählt eine der vier Richtungen (oben, unten, links, rechts)
+     * @returns {Object} - Bewegungsrichtung als {x, z}-Objekt
      */
     getRandomDirection() {
         const direction = Math.floor(Math.random() * 4);
@@ -55,7 +66,10 @@ export class Enemy {
     }
     
     /**
-     * Bewegt den Gegner
+     * Bewegt den Gegner durch das Spielfeld
+     * Wählt bei Hindernissen automatisch eine neue Richtung
+     * @param {Function} isPositionOccupied - Callback-Funktion zum Prüfen, ob die Zielposition belegt ist
+     * @param {Array} enemies - Liste aller Gegner für Kollisionsprüfung
      */
     move(isPositionOccupied, enemies) {
         // Wenn Gegner aktuell nicht in Bewegung ist, setze neues Ziel
@@ -132,6 +146,8 @@ export class Enemy {
     
     /**
      * Prüft Kollision mit einem Spieler
+     * @param {Object} player - Spieler-Objekt zum Prüfen der Kollision
+     * @returns {boolean} - true, wenn eine Kollision erkannt wurde
      */
     checkCollisionWithPlayer(player) {
         const distX = Math.abs(player.mesh.position.x - this.mesh.position.x);
@@ -142,6 +158,9 @@ export class Enemy {
     
     /**
      * Prüft Kollision mit anderen Gegnern
+     * Bei Kollision ändern beide Gegner ihre Richtung
+     * @param {Array} enemies - Liste aller Gegner im Spiel
+     * @returns {boolean} - true, wenn eine Kollision erkannt wurde
      */
     checkCollisionWithEnemies(enemies) {
         for (const otherEnemy of enemies) {
@@ -161,6 +180,7 @@ export class Enemy {
     
     /**
      * Kehrt die Bewegungsrichtung um
+     * Wird bei Kollisionen oder Hindernissen aufgerufen
      */
     reverseDirection() {
         // In die entgegengesetzte Richtung der aktuellen Richtung bewegen

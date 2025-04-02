@@ -1,6 +1,7 @@
 /**
  * Game Controller
  * Hauptsteuerungsklasse für das Spiel, verwaltet den Spielzustand und steuert den Spielablauf
+ * Koordiniert die Interaktion zwischen Spieler, Gegnern, Items und dem Level
  */
 
 import { 
@@ -15,6 +16,11 @@ import { PlacedBlock } from '../entities/Item.js';
 import { UIController } from './UIController.js';
 
 export class GameController {
+    /**
+     * Erstellt einen neuen GameController
+     * Initialisiert alle grundlegenden Spielvariablen und -zustände
+     * @param {Object} scene - Die Three.js-Szene für Rendering
+     */
     constructor(scene) {
         // Three.js-Elemente
         this.scene = scene;
@@ -50,6 +56,7 @@ export class GameController {
     
     /**
      * Initialisiert das Spiel
+     * Startet das UI, generiert das erste Level und richtet Event-Listener ein
      */
     init() {
         // UI initialisieren
@@ -64,6 +71,7 @@ export class GameController {
     
     /**
      * Registriert Event-Listener für Tastatureingaben und andere Ereignisse
+     * Ermöglicht die Steuerung des Spiels durch den Benutzer
      */
     setupEventListeners() {
         document.addEventListener('keydown', this.onKeyDown.bind(this));
@@ -73,6 +81,8 @@ export class GameController {
     
     /**
      * Generiert ein neues Level
+     * Löscht das vorherige Level und erstellt ein neues mit dem LevelGenerator
+     * @param {number} level - Die Levelnummer, beeinflusst die Schwierigkeit
      */
     generateLevel(level) {
         this.clearLevel();
@@ -99,6 +109,7 @@ export class GameController {
     
     /**
      * Erstellt den Spieler
+     * Erzeugt eine neue Spieler-Instanz an der Startposition
      */
     createPlayer() {
         this.player = new Player(
@@ -111,6 +122,7 @@ export class GameController {
     
     /**
      * Erstellt den Ausgang
+     * Der Ausgang wird zunächst unsichtbar sein, bis alle Plutonium-Proben abgeliefert wurden
      */
     createExit() {
         const geometry = new THREE.BoxGeometry(0.8, 0.1, 0.8);
@@ -128,6 +140,7 @@ export class GameController {
     
     /**
      * Leert das aktuelle Level (entfernt alle Objekte)
+     * Wird vor der Generierung eines neuen Levels aufgerufen
      */
     clearLevel() {
         // Arrays leeren und Objekte entfernen
@@ -151,6 +164,7 @@ export class GameController {
     
     /**
      * Führt die Spiellogik für jeden Frame aus
+     * Aktualisiert Spieler- und Gegnerbewegungen
      */
     update() {
         if (!this.levelCompleted) {
@@ -167,6 +181,7 @@ export class GameController {
     
     /**
      * Bewegt alle Gegner
+     * Lässt die Gegner autonom durch das Level wandern und prüft Kollisionen mit dem Spieler
      */
     moveEnemies() {
         for (const enemy of this.enemies) {
@@ -208,6 +223,8 @@ export class GameController {
     
     /**
      * Prüft Kollisionen des Spielers mit anderen Objekten
+     * Behandelt Kollisionen mit Plutonium, Tonnen, Blöcken und dem Ausgang
+     * Löst Aktionen wie Einsammeln, Timer-Steuerung und Levelabschluss aus
      */
     checkCollisions() {
         // Kollision mit Plutonium
@@ -265,6 +282,7 @@ export class GameController {
     
     /**
      * Aktiviert den Ausgang, nachdem alle Plutonium-Proben abgeliefert wurden
+     * Macht den Ausgang sichtbar und fügt einen Blinkeffekt hinzu
      */
     activateExit() {
         this.exit.visible = true;
@@ -278,6 +296,7 @@ export class GameController {
     
     /**
      * Schließt das aktuelle Level ab und lädt das nächste
+     * Wird aufgerufen, wenn der Spieler den Ausgang erreicht
      */
     completeLevel() {
         this.exitReached = true;
@@ -294,6 +313,7 @@ export class GameController {
     
     /**
      * Platziert einen Block
+     * Erstellt einen Block hinter dem Spieler, wenn verfügbar und die Position frei ist
      */
     placeBlock() {
         if (this.playerBlocks <= 0) return;
@@ -321,6 +341,7 @@ export class GameController {
     
     /**
      * Reduziert die Spielerleben
+     * Bei Lebensverlust wird der Spieler zurückgesetzt oder das Spiel beendet
      */
     loseLife() {
         this.playerLives--;
@@ -338,6 +359,8 @@ export class GameController {
     
     /**
      * Startet den Plutonium-Timer
+     * Startet einen Countdown, nachdem Plutonium eingesammelt wurde
+     * Verringert den Timer-Wert sekündlich und löst Lebensverlust aus, wenn der Timer abläuft
      */
     startPlutoniumTimer() {
         this.stopPlutoniumTimer();
@@ -358,6 +381,7 @@ export class GameController {
     
     /**
      * Stoppt den Plutonium-Timer
+     * Wird aufgerufen, wenn Plutonium abgeliefert wurde oder der Timer abgelaufen ist
      */
     stopPlutoniumTimer() {
         if (this.plutoniumTimer) {
@@ -368,6 +392,7 @@ export class GameController {
     
     /**
      * Aktualisiert die UI-Elemente
+     * Aktualisiert alle Anzeigen des Spiels (Timer, Plutonium, Leben, Blöcke, Punkte)
      */
     updateUI() {
         this.uiController.updateTimer(this.plutoniumTimer ? this.plutoniumTimerValue : -1);
@@ -379,6 +404,7 @@ export class GameController {
     
     /**
      * Setzt das Spiel zurück
+     * Wird nach Game Over aufgerufen, setzt alle Spielwerte auf Anfangswerte
      */
     resetGame() {
         this.playerLives = PLAYER_START_LIVES;
@@ -396,6 +422,9 @@ export class GameController {
     
     /**
      * Behandelt Tastendruck-Events
+     * Setzt die Bewegungsrichtung des Spielers basierend auf den WASD-Tasten
+     * Löst Blockplatzierung bei Leertaste aus
+     * @param {Object} event - Das Tastendruck-Event
      */
     onKeyDown(event) {
         switch (event.key) {
@@ -423,6 +452,8 @@ export class GameController {
     
     /**
      * Behandelt Tastenloslassen-Events
+     * Stoppt die Bewegung des Spielers, wenn eine Richtungstaste losgelassen wird
+     * @param {Object} event - Das Tastenloslassen-Event
      */
     onKeyUp(event) {
         switch (event.key) {
@@ -443,6 +474,7 @@ export class GameController {
     
     /**
      * Behandelt Fenstergrößenänderungen
+     * Wird von der Game-Instanz implementiert
      */
     onWindowResize() {
         // Wird von der Game-Instanz implementiert

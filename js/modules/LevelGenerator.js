@@ -1,6 +1,7 @@
 /**
  * Level-Generator-Modul
  * Verantwortlich für die Generierung von Spielleveln
+ * Erstellt Wände, Gegner, Items und andere Objekte im Spielfeld
  */
 
 import { GRID_WIDTH, GRID_HEIGHT, WALL_RATIO } from '../config/config.js';
@@ -9,12 +10,23 @@ import { Enemy } from '../entities/Enemy.js';
 import { Plutonium, Barrel, CollectibleBlock } from '../entities/Item.js';
 
 export class LevelGenerator {
+    /**
+     * Erstellt einen neuen Level-Generator
+     * @param {Object} gameWorld - Die Spielwelt-Gruppe, in der die Level-Objekte platziert werden
+     */
     constructor(gameWorld) {
         this.gameWorld = gameWorld;
     }
     
     /**
      * Erstellt ein neues Level mit allen Elementen
+     * Generiert die Spielfeldgrenzen, Wände, Gegner, Items und andere Objekte
+     * @param {number} level - Die Levelnummer, beeinflusst die Schwierigkeit
+     * @param {Array} walls - Array zum Speichern der generierten Wände
+     * @param {Array} enemies - Array zum Speichern der generierten Gegner
+     * @param {Array} plutoniumItems - Array zum Speichern der generierten Plutonium-Items
+     * @param {Array} barrels - Array zum Speichern der generierten Tonnen
+     * @param {Array} collectibleBlocks - Array zum Speichern der generierten sammelbaren Blöcke
      */
     generateLevel(level, walls, enemies, plutoniumItems, barrels, collectibleBlocks) {
         // Parameter basierend auf Level anpassen
@@ -36,6 +48,8 @@ export class LevelGenerator {
     
     /**
      * Erstellt die Außenwände des Spielfelds
+     * Umrandet das komplette Spielfeld mit Wänden
+     * @param {Array} walls - Array zum Speichern der generierten Wände
      */
     createBorder(walls) {
         // Horizontale Wände (oben und unten)
@@ -59,6 +73,10 @@ export class LevelGenerator {
     
     /**
      * Generiert die inneren Wände des Spielfelds
+     * Erstellt Hindernisse und Labyrinthe im Spielfeld
+     * Stellt sicher, dass alle Bereiche des Spielfelds erreichbar bleiben
+     * @param {number} ratio - Die Wahrscheinlichkeit für Wandplatzierung (0-1)
+     * @param {Array} walls - Array zum Speichern der generierten Wände
      */
     generateWalls(ratio, walls) {
         // Zweidimensionales Array zur Darstellung des Spielfelds
@@ -129,6 +147,11 @@ export class LevelGenerator {
     /**
      * Prüft, ob alle freien Felder vom Startpunkt aus erreichbar sind
      * Verwendet einen Floodfill-Algorithmus
+     * Verhindert die Generierung von unzugänglichen Bereichen im Level
+     * @param {Array} grid - 2D-Array des Spielfelds (true = Wand, false = frei)
+     * @param {number} startX - X-Koordinate des Startpunkts
+     * @param {number} startZ - Z-Koordinate des Startpunkts
+     * @returns {boolean} - true, wenn alle freien Felder erreichbar sind
      */
     isLevelFullyAccessible(grid, startX, startZ) {
         // Kopieren des Grids, damit wir es verändern können
