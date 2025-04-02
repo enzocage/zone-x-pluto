@@ -100,6 +100,14 @@ export class SoundGenerator {
     }
     
     /**
+     * Alternative Methode für das Platzieren eines Blocks, wird vom GameController verwendet
+     */
+    playPlaceBlock() {
+        // Verwende die bestehende Methode für Konsistenz
+        this.playBlockPlace();
+    }
+    
+    /**
      * Erzeugt einen Sound für das Einsammeln eines Blocks
      */
     playBlockPickup() {
@@ -122,6 +130,36 @@ export class SoundGenerator {
         oscillator.stop(this.audioContext.currentTime + 0.1);
     }
     
+    /**
+     * Alternative Methode für das Einsammeln eines Blocks, wird vom GameController verwendet
+     */
+    playCollectBlock() {
+        // Verwende die bestehende Methode für Konsistenz
+        this.playBlockPickup();
+    }
+    
+    /**
+     * Erzeugt einen Fehlersound für ungültige Aktionen
+     */
+    playError() {
+        if (this.muted) return;
+        
+        const oscillator = this.audioContext.createOscillator();
+        const gainNode = this.audioContext.createGain();
+        
+        oscillator.type = 'square';
+        oscillator.frequency.setValueAtTime(110, this.audioContext.currentTime);
+        
+        gainNode.gain.setValueAtTime(0.2, this.audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.2);
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(this.masterGainNode);
+        
+        oscillator.start();
+        oscillator.stop(this.audioContext.currentTime + 0.2);
+    }
+    
     // ===== PLUTONIUM-EREIGNISSE =====
     
     /**
@@ -138,6 +176,38 @@ export class SoundGenerator {
         oscillator.frequency.exponentialRampToValueAtTime(880, this.audioContext.currentTime + 0.2);
         
         gainNode.gain.setValueAtTime(0.2, this.audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.3);
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(this.masterGainNode);
+        
+        oscillator.start();
+        oscillator.stop(this.audioContext.currentTime + 0.3);
+    }
+    
+    /**
+     * Erzeugt einen Sound für das Einsammeln von Plutonium
+     * Alternative Methode, wird von GameController verwendet
+     */
+    playCollectPlutonium() {
+        // Verwende die bestehende Methode für Konsistenz
+        this.playPlutoniumPickup();
+    }
+    
+    /**
+     * Erzeugt einen Sound für das Abliefern von Plutonium
+     */
+    playDeliverPlutonium() {
+        if (this.muted) return;
+        
+        const oscillator = this.audioContext.createOscillator();
+        const gainNode = this.audioContext.createGain();
+        
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(660, this.audioContext.currentTime);
+        oscillator.frequency.exponentialRampToValueAtTime(330, this.audioContext.currentTime + 0.3);
+        
+        gainNode.gain.setValueAtTime(0.3, this.audioContext.currentTime);
         gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.3);
         
         oscillator.connect(gainNode);
@@ -230,28 +300,6 @@ export class SoundGenerator {
         gainNode.connect(this.masterGainNode);
         
         noise.start();
-    }
-    
-    /**
-     * Erzeugt einen Sound für die Kollision von Gegnern untereinander
-     */
-    playEnemyToEnemyCollision() {
-        if (this.muted) return;
-        
-        const oscillator = this.audioContext.createOscillator();
-        const gainNode = this.audioContext.createGain();
-        
-        oscillator.type = 'triangle';
-        oscillator.frequency.setValueAtTime(110, this.audioContext.currentTime);
-        
-        gainNode.gain.setValueAtTime(0.15, this.audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.2);
-        
-        oscillator.connect(gainNode);
-        gainNode.connect(this.masterGainNode);
-        
-        oscillator.start();
-        oscillator.stop(this.audioContext.currentTime + 0.2);
     }
     
     // ===== SPIELSTATUSEREIGNISSE =====

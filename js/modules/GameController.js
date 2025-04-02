@@ -253,9 +253,6 @@ export class GameController {
                     enemy1.reverseDirection();
                     enemy2.reverseDirection();
                     
-                    // Sound abspielen
-                    this.soundGenerator.playEnemyToEnemyCollision();
-                    
                     console.log('Gegner-Kollision in GameController erkannt!');
                 }
             }
@@ -334,6 +331,7 @@ export class GameController {
                     this.plutoniumCollected = true;
                     this.startPlutoniumTimer();
                     this.soundGenerator.playCollectPlutonium();
+                    this.remainingPlutonium--;
                     uiNeedsUpdate = true;
                     console.log("Plutonium eingesammelt.");
                 }
@@ -345,7 +343,6 @@ export class GameController {
             if (barrel.checkCollisionWithPlayer(this.player) && this.plutoniumCollected) {
                 this.plutoniumCollected = false;
                 this.stopPlutoniumTimer();
-                this.remainingPlutonium--;
                 this.playerScore += 100; // Beispiel-Score
                 this.soundGenerator.playDeliverPlutonium();
                 console.log(`Plutonium abgeliefert. Verbleibend: ${this.remainingPlutonium}`);
