@@ -30,8 +30,9 @@ export class LevelGenerator {
      */
     generateLevel(level, walls, enemies, plutoniumItems, barrels, collectibleBlocks) {
         // Parameter basierend auf Level anpassen
-        const enemyCount = Math.floor(7 * Math.pow(0.2  , level - 1));
-        const wallRatio = WALL_RATIO * Math.pow(0.2, level - 1);
+        // Auch für Level 1 eine angemessene Anzahl von Gegnern und Wanddichte garantieren
+        const enemyCount = level === 1 ? 15 : Math.floor(7 * Math.pow(2.2, level - 1));
+        const wallRatio = level === 1 ? WALL_RATIO : WALL_RATIO * Math.pow(0.2, level - 1);
         
         // Spielfeld umranden mit Wänden
         this.createBorder(walls);
