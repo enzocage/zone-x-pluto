@@ -12,12 +12,13 @@ export const CELL_SIZE = 1;
 export const PLAYER_START_LIVES = 5;
 export const PLAYER_START_BLOCKS = 15;
 export const PLAYER_START_POSITION = { x: 2, z: 2 };
-export const PLAYER_MOVE_SPEED = 0.4;
+export const PLAYER_MOVE_SPEED = 0.08;
 
 // Gegner-Konfiguration
-export const INITIAL_ENEMIES = 7;
+export const INITIAL_ENEMIES = 27;
 export const ENEMY_MIN_SPEED = 0.03;
 export const ENEMY_SPEED_VARIATION = 0.02;
+export const ENEMY_COLLISION_THRESHOLD = 0.8; // Kollisionsbereich für Gegner (als Anteil von CELL_SIZE)
 
 // Level-Konfiguration
 export const WALL_RATIO = 0.25; // 1:4 Wände zu freien Feldern
