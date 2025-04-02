@@ -14,7 +14,7 @@ import {
 } from '../config/config.js';
 import { Player } from '../entities/Player.js';
 import { LevelGenerator } from './LevelGenerator.js';
-import { PlacedBlock } from '../entities/Item.js';
+import { PlacedBlock, CollectibleBlock } from '../entities/Item.js';
 import { UIController } from './UIController.js';
 import { SoundGenerator } from './SoundGenerator.js';
 
@@ -51,6 +51,10 @@ export class GameController {
         this.levelCompleted = false;
         this.currentLevel = 1;
         this.exitReached = false;
+        
+        // Hinzugefügte Eigenschaften für vorherige Spielerposition
+        this.previousPlayerGridX = PLAYER_START_POSITION.x;
+        this.previousPlayerGridZ = PLAYER_START_POSITION.z;
         
         // Hilfsobjekte
         this.levelGenerator = new LevelGenerator(this.gameWorld);
@@ -188,13 +192,29 @@ export class GameController {
      * Aktualisiert Spieler- und Gegnerbewegungen
      */
     update() {
-        if (!this.levelCompleted) {
-            // Spieler bewegen
+        if (!this.levelCompleted && this.player) {
+            // Speichere die vorherige Position, BEVOR der Spieler sich bewegt oder versucht zu bewegen
+            // Nur updaten, wenn sich die Position tatsächlich geändert HATTE im letzten Frame
+            // Oder einfach immer die aktuelle Position als 'vorherige' für den nächsten Frame speichern.
+            // Die Logik hier speichert die Position vom *Beginn* des aktuellen Frames.
+            const currentX = this.player.gridX;
+            const currentZ = this.player.gridZ;
+
+            // Spieler bewegen (checkCollisions wird als Callback übergeben)
             this.player.move(
                 this.isPositionOccupied.bind(this),
-                this.checkCollisions.bind(this)
+                this.checkCollisions.bind(this) // Wird nach der Bewegung aufgerufen
             );
-            
+
+            // Aktualisiere die 'vorherige' Position für den nächsten Frame,
+            // *nachdem* die Bewegung für diesen Frame versucht wurde.
+            if (this.player.gridX !== currentX || this.player.gridZ !== currentZ) {
+                // Nur wenn sich der Spieler tatsächlich bewegt hat
+                this.previousPlayerGridX = currentX;
+                this.previousPlayerGridZ = currentZ;
+                // console.log(`Spieler bewegt. Vorherige Pos: (${this.previousPlayerGridX}, ${this.previousPlayerGridZ}), Aktuelle Pos: (${this.player.gridX}, ${this.player.gridZ})`);
+            }
+
             // Gegner bewegen
             this.moveEnemies();
         }
@@ -210,7 +230,7 @@ export class GameController {
             enemy.move(this.isPositionOccupied.bind(this), this.enemies);
             
             // Kollision mit Spieler prüfen
-            if (enemy.checkCollisionWithPlayer(this.player)) {
+            if (enemy.checkCollisionWithPlayer(this.player, this.isPositionOccupied.bind(this), this.enemies)) {
                 this.soundGenerator.playEnemyCollision();
                 this.loseLife();
             }
@@ -244,131 +264,152 @@ export class GameController {
     
     /**
      * Prüft, ob eine Position von einem Objekt belegt ist
+     * Wichtig für Spielerbewegung und Gegner-KI
      */
     isPositionOccupied(x, z) {
-        // Spieler prüfen
-        if (this.player && this.player.gridX === x && this.player.gridZ === z) {
+        // Spieler prüfen (wichtig für Gegner-KI, nicht für Spielerbewegung selbst)
+        // Ein Spieler sollte nicht durch sich selbst blockiert werden
+        // if (this.player && this.player.gridX === x && this.player.gridZ === z) {
+        //     return true;
+        // }
+
+        // Wände prüfen
+        if (this.walls.some(wall => wall.gridX === x && wall.gridZ === z)) {
+            // console.log(`Position (${x}, ${z}) durch Wand blockiert.`);
             return true;
         }
-        
-        // Wände prüfen
-        for (const wall of this.walls) {
-            if (wall.gridX === x && wall.gridZ === z) {
-                return true;
-            }
+
+        // Gegner prüfen
+         if (this.enemies.some(enemy => enemy.gridX === x && enemy.gridZ === z)) {
+             // console.log(`Position (${x}, ${z}) durch Gegner blockiert.`);
+             return true;
+         }
+
+        // Platzierte Blöcke prüfen (NEU) - Nur aktive Blöcke blockieren
+        if (this.blocks.some(block => !block.collected && block.gridX === x && block.gridZ === z)) {
+            // console.log(`Position (${x}, ${z}) durch platzierten Block blockiert.`);
+            return true;
         }
-        
-        // Platzierte Blocks prüfen
-        for (const block of this.blocks) {
-            if (block.gridX === x && block.gridZ === z) {
-                return true;
-            }
-        }
-        
-        // Position ist frei
+
+        // Fässer prüfen - Blockieren normalerweise nicht
+        // if (this.barrels.some(barrel => barrel.gridX === x && barrel.gridZ === z)) {
+        //     return true;
+        // }
+
+        // Plutonium prüfen - Blockiert normalerweise nicht
+        // if (this.plutoniumItems.some(item => !item.collected && item.gridX === x && item.gridZ === z)) {
+        //     return true;
+        // }
+
+        // Sammelbare Blöcke prüfen - Blockieren normalerweise nicht
+        // if (this.collectibleBlocks.some(block => !block.collected && block.gridX === x && block.gridZ === z)) {
+        //     return true;
+        // }
+
+        // Exit prüfen - Blockiert normalerweise nicht, außer wenn er physisch ist
+        // if (this.exit && this.exit.visible && this.exit.gridX === x && this.exit.gridZ === z) {
+        //     return true;
+        // }
+
+        // console.log(`Position (${x}, ${z}) ist frei.`);
         return false;
     }
     
     /**
-     * Prüft Kollisionen des Spielers mit anderen Objekten
-     * Behandelt Kollisionen mit Plutonium, Tonnen, Blöcken und dem Ausgang
-     * Löst Aktionen wie Einsammeln, Timer-Steuerung und Levelabschluss aus
+     * Prüft Kollisionen des Spielers mit verschiedenen Objekten nach der Bewegung
      */
     checkCollisions() {
-        // Prüfe Kollision mit Plutonium
-        for (let i = 0; i < this.plutoniumItems.length; i++) {
-            const item = this.plutoniumItems[i];
-            
-            if (this.player.gridX === item.gridX && this.player.gridZ === item.gridZ) {
-                console.log('Plutonium aufgesammelt!');
-                
-                // Sound abspielen
-                this.soundGenerator.playPlutoniumPickup();
-                
-                // Plutonium entfernen
-                item.remove();
-                this.plutoniumItems.splice(i, 1);
-                i--;
-                
-                // Plutonium-Timer starten
-                this.startPlutoniumTimer();
-                
-                // Spielstatus aktualisieren
-                this.plutoniumCollected = true;
+        if (!this.player) return; // Frühzeitiger Ausstieg, wenn Spieler nicht existiert
+
+        const playerX = this.player.gridX;
+        const playerZ = this.player.gridZ;
+
+        let uiNeedsUpdate = false;
+
+        // Kollision mit Plutonium
+        this.plutoniumItems.forEach((item) => {
+            if (item.checkCollisionWithPlayer(this.player)) {
+                if (!item.collected) { // Nur einsammeln, wenn noch nicht eingesammelt
+                    item.collect();
+                    this.plutoniumCollected = true;
+                    this.startPlutoniumTimer();
+                    this.soundGenerator.playCollectPlutonium();
+                    uiNeedsUpdate = true;
+                    console.log("Plutonium eingesammelt.");
+                }
+            }
+        });
+
+        // Kollision mit Fässern (Plutonium abliefern)
+        this.barrels.forEach(barrel => {
+            if (barrel.checkCollisionWithPlayer(this.player) && this.plutoniumCollected) {
+                this.plutoniumCollected = false;
+                this.stopPlutoniumTimer();
                 this.remainingPlutonium--;
-                this.playerScore += 100;
-                
-                // UI aktualisieren
-                this.updateUI();
-                
-                if (this.remainingPlutonium === 0) {
+                this.playerScore += 100; // Beispiel-Score
+                this.soundGenerator.playDeliverPlutonium();
+                console.log(`Plutonium abgeliefert. Verbleibend: ${this.remainingPlutonium}`);
+                if (this.remainingPlutonium <= 0) {
                     this.activateExit();
                 }
-                
-                break;
+                uiNeedsUpdate = true;
             }
-        }
-        
-        // Prüfe Kollision mit Fässern/Tonnen
-        for (let i = 0; i < this.barrels.length; i++) {
-            const barrel = this.barrels[i];
-            
-            if (this.player.gridX === barrel.gridX && this.player.gridZ === barrel.gridZ) {
-                console.log('Tonne erreicht!');
-                
-                if (this.plutoniumCollected) {
-                    // Plutonium in Fass entsorgen
-                    this.soundGenerator.playPlutoniumPickup(); // Hier könnte ein eigener Sound sein
-                    
-                    this.stopPlutoniumTimer();
-                    this.plutoniumCollected = false;
-                    this.playerScore += 200;
-                    
-                    // UI aktualisieren
-                    this.updateUI();
-                }
-                
-                break;
-            }
-        }
-        
-        // Prüfe Kollision mit einsammelbaren Blöcken
-        for (let i = 0; i < this.collectibleBlocks.length; i++) {
-            const block = this.collectibleBlocks[i];
-            
-            if (this.player.gridX === block.gridX && this.player.gridZ === block.gridZ) {
-                console.log('Block aufgesammelt!');
-                
-                // Sound abspielen
-                this.soundGenerator.playBlockPickup();
-                
-                // Block entfernen
-                block.remove();
-                this.collectibleBlocks.splice(i, 1);
-                i--;
-                
-                // Block dem Spieler hinzufügen
+        });
+
+        // Kollision mit sammelbaren Blöcken (im Level verteilt)
+         this.collectibleBlocks.forEach((block) => {
+              if (block.checkCollisionWithPlayer(this.player)) {
+                  if(!block.collected){ // Nur sammeln, wenn noch nicht gesammelt
+                      block.collect(); // Macht den Block unsichtbar
+                      this.playerBlocks++;
+                      this.soundGenerator.playCollectBlock();
+                      uiNeedsUpdate = true;
+                      console.log(`Sammelbaren Block eingesammelt. Inventar: ${this.playerBlocks}`);
+                  }
+              }
+          });
+         // Optional: Entferne gesammelte Blöcke aus dem Array, um Performance zu verbessern
+         // this.collectibleBlocks = this.collectibleBlocks.filter(block => !block.collected);
+
+
+        // Kollision mit platzierten Blöcken (NEU)
+        let collectedPlacedBlock = false;
+        this.blocks = this.blocks.filter(block => {
+            if (!block.collected && block.checkCollisionWithPlayer(this.player)) {
+                block.collect(); // Markiert als gesammelt, macht unsichtbar
+                // Es ist wichtig, dass collect() auch das Mesh ausblendet.
+                // Die .remove() Methode sollte hier nicht unbedingt aufgerufen werden,
+                // da sie das Objekt komplett zerstört, was zu Problemen führen kann,
+                // wenn andere Teile des Codes noch darauf zugreifen.
+                // Das Filtern aus dem Array ist der Hauptmechanismus zum Entfernen.
                 this.playerBlocks++;
-                this.playerScore += 50;
-                
-                // UI aktualisieren
-                this.updateUI();
-                
-                break;
+                this.soundGenerator.playCollectBlock(); // Gleicher Sound wie CollectibleBlock
+                collectedPlacedBlock = true;
+                console.log(`Platzierten Block eingesammelt. Inventar: ${this.playerBlocks}`);
+                // Gib false zurück, um diesen Block aus dem `this.blocks` Array zu entfernen
+                return false;
+            }
+            // Behalte alle anderen Blöcke (die nicht kollidiert sind oder bereits gesammelt wurden)
+            return true;
+        });
+        if (collectedPlacedBlock) {
+            uiNeedsUpdate = true;
+        }
+
+
+        // Kollision mit Exit
+        if (this.exit && this.exit.visible && this.exit.gridX === playerX && this.exit.gridZ === playerZ) {
+            if (!this.exitReached) { // Nur einmal auslösen
+                this.exitReached = true;
+                 console.log("Exit erreicht!");
+                this.completeLevel();
+                 // uiNeedsUpdate wird in completeLevel gesetzt oder dort updateUI() aufgerufen
             }
         }
-        
-        // Prüfe Kollision mit Exit
-        if (this.exit && this.exit.visible) {
-            if (this.player.gridX === this.exit.gridX && 
-                this.player.gridZ === this.exit.gridZ) {
-                console.log('Exit erreicht!');
-                
-                // Sound abspielen
-                this.soundGenerator.playLevelComplete();
-                
-                this.completeLevel();
-            }
+
+        // UI nur einmal am Ende aktualisieren, wenn nötig
+        if (uiNeedsUpdate) {
+            this.updateUI();
         }
     }
     
@@ -404,41 +445,44 @@ export class GameController {
     }
     
     /**
-     * Platziert einen Block an der aktuellen Spieler-Position
-     * Kann verwendet werden, um Wege zu blockieren oder Gegner einzusperren
+     * Platziert einen Block an der Position, die der Spieler ZULETZT verlassen hat
      */
     placeBlock() {
-        // Prüfen, ob der Spieler überhaupt Blöcke hat
-        if (this.playerBlocks <= 0) {
-            console.log('Keine Blöcke mehr verfügbar!');
+        // Prüfe, ob der Spieler Blöcke hat und ob Spieler existiert
+        if (!this.player || this.playerBlocks <= 0) {
+            if (this.player) this.soundGenerator.playError(); // Nur Sound, wenn Spieler existiert
+            console.log("Platzieren fehlgeschlagen: Keine Blöcke im Inventar.");
             return;
         }
-        
-        // Prüfen, ob an der aktuellen Position bereits ein Block ist
-        const targetPos = { x: this.player.gridX, z: this.player.gridZ };
-        
-        for (const block of this.blocks) {
-            if (block.gridX === targetPos.x && block.gridZ === targetPos.z) {
-                console.log('Hier steht bereits ein Block!');
-                return;
-            }
+
+        // Zielposition ist die *vorherige* Position des Spielers
+        const targetX = this.previousPlayerGridX;
+        const targetZ = this.previousPlayerGridZ;
+
+         // Zusätzliche Sicherheitsprüfung: Stelle sicher, dass die vorherige Position nicht die aktuelle ist
+         // (sollte durch die Update-Logik abgedeckt sein, aber sicher ist sicher)
+         if (targetX === this.player.gridX && targetZ === this.player.gridZ) {
+             console.log("Platzieren fehlgeschlagen: Zielposition ist die aktuelle Spielerposition.");
+              this.soundGenerator.playError();
+             return;
+         }
+
+
+        // Prüfe, ob die Zielposition bereits belegt ist
+        if (this.isPositionOccupied(targetX, targetZ)) {
+             console.log(`Platzieren fehlgeschlagen: Position (${targetX}, ${targetZ}) ist belegt.`);
+             this.soundGenerator.playError(); // Position belegt Sound
+             return;
         }
-        
-        // Block platzieren
-        console.log('Block platziert!');
-        
-        // Sound abspielen
-        this.soundGenerator.playBlockPlace();
-        
-        // Block-Objekt erstellen
-        const block = new PlacedBlock(this.gameWorld, targetPos.x, targetPos.z);
-        this.blocks.push(block);
-        
-        // Block vom Inventar abziehen
+
+        // Platziere den Block
         this.playerBlocks--;
-        
-        // UI aktualisieren
-        this.updateUI();
+        const newBlock = new PlacedBlock(this.gameWorld, targetX, targetZ);
+        this.blocks.push(newBlock); // Füge den neuen Block zur Liste der platzierten Blöcke hinzu
+        this.soundGenerator.playPlaceBlock();
+        this.updateUI(); // UI aktualisieren, um die Blockanzahl zu zeigen
+
+        console.log(`Block platziert bei (${targetX}, ${targetZ}). Verbleibende Blöcke: ${this.playerBlocks}`);
     }
     
     /**
@@ -552,35 +596,38 @@ export class GameController {
      * @param {KeyboardEvent} event - Das Tastatur-Event
      */
     onKeyDown(event) {
-        // Nur reagieren, wenn Level nicht abgeschlossen ist
+        if (!this.player) return;
+
+        // Blockiere weitere Eingaben, wenn das Level abgeschlossen ist, aber erlaube vielleicht Neustart?
         if (this.levelCompleted) return;
-        
-        switch (event.key) {
+
+        switch (event.code) {
             case 'ArrowUp':
-            case 'w':
+            case 'KeyW':
                 this.player.setMoveDirection(0, -1);
                 break;
             case 'ArrowDown':
-            case 's':
+            case 'KeyS':
                 this.player.setMoveDirection(0, 1);
                 break;
             case 'ArrowLeft':
-            case 'a':
+            case 'KeyA':
                 this.player.setMoveDirection(-1, 0);
                 break;
             case 'ArrowRight':
-            case 'd':
+            case 'KeyD':
                 this.player.setMoveDirection(1, 0);
                 break;
-            case ' ':
+            case 'Space':
+                // Block platzieren (Logik ist jetzt in placeBlock)
                 this.placeBlock();
+                // Verhindere Standardverhalten der Leertaste (z.B. Scrollen)
+                event.preventDefault();
                 break;
-            case 'm':
-                // Sound ein-/ausschalten
-                const muted = !this.soundGenerator.muted;
-                this.soundGenerator.setMuted(muted);
-                console.log('Sound ' + (muted ? 'aus' : 'ein'));
-                break;
+            // Beispiel: Neustart-Taste
+            // case 'KeyR':
+            //     this.resetGame(); // Oder eine spezifischere Neustart-Funktion
+            //     break;
         }
     }
     

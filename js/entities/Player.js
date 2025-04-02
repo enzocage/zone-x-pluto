@@ -29,6 +29,10 @@ export class Player {
         
         // Event-Callbacks
         this.onMoveCallback = null;
+        this.onCollisionCallback = null;
+        
+        // Bewegungsstatus
+        this.occupiedCells = []; // Aktuell vom Spieler belegte Zellen (Start und Ziel)
         
         this.mesh = this.createMesh();
         this.addLightToPlayer();
@@ -139,16 +143,29 @@ export class Player {
                             x: -(nextTargetX + CELL_SIZE/2),
                             z: -(nextTargetZ + CELL_SIZE/2)
                         };
+                        
+                        // Beide Zellen als belegt markieren (Start und Ziel)
+                        this.occupiedCells = [
+                            { x: this.gridX - this.moveDirection.x, z: this.gridZ - this.moveDirection.y },
+                            { x: this.gridX, z: this.gridZ }
+                        ];
+                        
                         // Bewegung fortsetzen (isMoving bleibt true)
                     } else {
                         // Hindernis gefunden, Bewegung stoppen
                         this.isMoving = false;
                         this.targetPosition = null;
+                        
+                        // Nur aktuelle Zelle als belegt markieren
+                        this.occupiedCells = [{ x: this.gridX, z: this.gridZ }];
                     }
                 } else {
                     // Keine Richtungstaste mehr gedrückt, Bewegung beenden
                     this.isMoving = false;
                     this.targetPosition = null;
+                    
+                    // Nur aktuelle Zelle als belegt markieren
+                    this.occupiedCells = [{ x: this.gridX, z: this.gridZ }];
                 }
             } else {
                 // Bewegung fortsetzen mit normalisiertem Vektor für flüssige Bewegung
@@ -178,12 +195,103 @@ export class Player {
                 this.gridX = targetX;
                 this.gridZ = targetZ;
                 
+                // Beide Zellen als belegt markieren (Start und Ziel)
+                this.occupiedCells = [
+                    { x: this.gridX - this.moveDirection.x, z: this.gridZ - this.moveDirection.y },
+                    { x: this.gridX, z: this.gridZ }
+                ];
+                
                 // Bewegungs-Callback aufrufen
                 if (this.onMoveCallback) {
                     this.onMoveCallback();
                     this.lastSoundTime = currentTime;
                 }
             }
+        } else {
+            // Wenn wir uns nicht bewegen, nur aktuelle Zelle als belegt markieren
+            this.occupiedCells = [{ x: this.gridX, z: this.gridZ }];
+        }
+    }
+    
+    /**
+     * Registriert einen Callback für Kollisionsereignisse
+     * @param {Function} callback - Die aufzurufende Funktion bei Kollisionen
+     */
+    onCollision(callback) {
+        this.onCollisionCallback = callback;
+    }
+    
+    /**
+     * Prüft Kollision mit einem Gegner
+     * Symmetrisch zur Enemy.checkCollisionWithPlayer Methode
+     * @param {Array} enemies - Liste aller Gegner für Kollisionsprüfung
+     * @returns {boolean} - true, wenn eine Kollision erkannt wurde
+     */
+    checkCollisionWithEnemies(enemies) {
+        let collided = false;
+        
+        for (const enemy of enemies) {
+            // Methode 1: Grid-basierte Kollisionserkennung
+            if (enemy.gridX === this.gridX && enemy.gridZ === this.gridZ) {
+                console.log('Grid-Kollision zwischen Spieler und Gegner!');
+                
+                // Kollisions-Callback aufrufen, wenn vorhanden
+                if (this.onCollisionCallback) {
+                    this.onCollisionCallback(enemy);
+                }
+                
+                collided = true;
+                break;
+            }
+            
+            // Methode 2: Kontinuierliche Kollisionserkennung während der Bewegung
+            const enemyWorldX = enemy.mesh.position.x;
+            const enemyWorldZ = enemy.mesh.position.z;
+            
+            // Relative Positionen berechnen (wichtig, da Spieler im Mittelpunkt ist)
+            const playerRelativeX = -this.gameWorld.position.x;
+            const playerRelativeZ = -this.gameWorld.position.z;
+            
+            // Abstand zwischen Spieler und Gegner
+            const distX = Math.abs(playerRelativeX - enemyWorldX);
+            const distZ = Math.abs(playerRelativeZ - enemyWorldZ);
+            
+            // Gleicher Schwellenwert wie in der Gegner-Klasse
+            const collisionThreshold = CELL_SIZE * 0.4;
+            
+            if (distX < collisionThreshold && distZ < collisionThreshold) {
+                console.log('Kontinuierliche Kollision zwischen Spieler und Gegner!');
+                
+                // Kollisions-Callback aufrufen, wenn vorhanden
+                if (this.onCollisionCallback) {
+                    this.onCollisionCallback(enemy);
+                }
+                
+                collided = true;
+                break;
+            }
+        }
+        
+        return collided;
+    }
+    
+    /**
+     * Behandelt Kollisionen mit Gegnern
+     * @param {Object} enemy - Der Gegner, mit dem kollidiert wurde
+     */
+    handleCollision(enemy) {
+        console.log('Spieler-Kollision wird behandelt...');
+        
+        // Temporär die Bewegung stoppen
+        this.isMoving = false;
+        this.targetPosition = null;
+        
+        // Nur aktuelle Zelle als belegt markieren
+        this.occupiedCells = [{ x: this.gridX, z: this.gridZ }];
+        
+        // Kollisions-Callback aufrufen, wenn vorhanden
+        if (this.onCollisionCallback) {
+            this.onCollisionCallback(enemy);
         }
     }
     
@@ -200,5 +308,6 @@ export class Player {
         this.gameWorld.position.z = -(this.gridZ + CELL_SIZE/2);
         this.isMoving = false;
         this.targetPosition = null;
+        this.occupiedCells = [{ x: this.gridX, z: this.gridZ }];
     }
 } 

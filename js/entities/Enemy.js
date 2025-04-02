@@ -370,12 +370,17 @@ export class Enemy {
             // Neue Richtung bei Kollision suchen
             this.handleCollision(isPositionOccupied, enemies, player);
             
+            // Auch den Spieler über die Kollision informieren, falls er die handleCollision-Methode hat
+            if (player.handleCollision) {
+                player.handleCollision(this);
+            }
+            
             return true;
         }
         
         // Methode 2: Kontinuierliche Kollisionserkennung für Bewegung zwischen Rasterpunkten
-        const playerWorldX = player.mesh.position.x;
-        const playerWorldZ = player.mesh.position.z;
+        const playerWorldX = -player.gameWorld.position.x;
+        const playerWorldZ = -player.gameWorld.position.z;
         
         // Berechnung des tatsächlichen Abstands zwischen Spieler und Gegner
         const distX = Math.abs(playerWorldX - this.mesh.position.x);
@@ -390,7 +395,32 @@ export class Enemy {
             // Neue Richtung bei Kollision suchen
             this.handleCollision(isPositionOccupied, enemies, player);
             
+            // Auch den Spieler über die Kollision informieren, falls er die handleCollision-Methode hat
+            if (player.handleCollision) {
+                player.handleCollision(this);
+            }
+            
             return true;
+        }
+        
+        // Prüfen, ob sich Spieler und Gegner auf denselben Zielzellen bewegen
+        if (this.isMoving && player.isMoving) {
+            // Prüfe auf Überschneidung der occupiedCells
+            for (const enemyCell of this.occupiedCells) {
+                for (const playerCell of player.occupiedCells) {
+                    if (enemyCell.x === playerCell.x && enemyCell.z === playerCell.z) {
+                        console.log('Bewegungspfad-Kollision zwischen Spieler und Gegner!');
+                        
+                        // Beide über die Kollision informieren
+                        this.handleCollision(isPositionOccupied, enemies, player);
+                        if (player.handleCollision) {
+                            player.handleCollision(this);
+                        }
+                        
+                        return true;
+                    }
+                }
+            }
         }
         
         return false;
