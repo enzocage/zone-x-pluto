@@ -21,7 +21,7 @@ export const ENEMY_SPEED_VARIATION = 0.06;
 export const ENEMY_COLLISION_THRESHOLD = 0.8; // Kollisionsbereich für Gegner (als Anteil von CELL_SIZE)
 
 // Level-Konfiguration
-export const WALL_RATIO = 0.025; // 1:4 Wände zu freien Feldern
+export const WALL_RATIO = 0.1; // 1:4 Wände zu freien Feldern
 export const WALL_COLOR = 0x888888;
 export const WALL_OPACITY = 0.5;
 
