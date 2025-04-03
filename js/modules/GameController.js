@@ -14,7 +14,7 @@ import {
 } from '../config/config.js';
 import { Player } from '../entities/Player.js';
 import { LevelGenerator } from './LevelGenerator.js';
-import { PlacedBlock, CollectibleBlock } from '../entities/Item.js';
+import { PlacedBlock, CollectibleBlock, Plutonium, Barrel } from '../entities/Item.js';
 import { UIController } from './UIController.js';
 import { SoundGenerator } from './SoundGenerator.js';
 
@@ -39,6 +39,7 @@ export class GameController {
         this.barrels = [];
         this.blocks = [];
         this.collectibleBlocks = [];
+        this.placedCollectibleBlocks = [];
         
         // Spielstatus
         this.playerLives = PLAYER_START_LIVES;
@@ -175,6 +176,7 @@ export class GameController {
         this.barrels.forEach(barrel => barrel.remove());
         this.blocks.forEach(block => block.remove());
         this.collectibleBlocks.forEach(block => block.remove());
+        this.placedCollectibleBlocks.forEach(block => block.remove());
         
         if (this.exit) this.gameWorld.remove(this.exit);
         
@@ -185,38 +187,60 @@ export class GameController {
         this.barrels = [];
         this.blocks = [];
         this.collectibleBlocks = [];
+        this.placedCollectibleBlocks = [];
     }
     
     /**
      * Führt die Spiellogik für jeden Frame aus
-     * Aktualisiert Spieler- und Gegnerbewegungen
+     * Aktualisiert Spieler- und Gegnerbewegungen, prüft Kollisionen und Sammelaktionen
      */
     update() {
         if (!this.levelCompleted && this.player) {
-            // Speichere die vorherige Position, BEVOR der Spieler sich bewegt oder versucht zu bewegen
-            // Nur updaten, wenn sich die Position tatsächlich geändert HATTE im letzten Frame
-            // Oder einfach immer die aktuelle Position als 'vorherige' für den nächsten Frame speichern.
-            // Die Logik hier speichert die Position vom *Beginn* des aktuellen Frames.
             const currentX = this.player.gridX;
             const currentZ = this.player.gridZ;
+            let collectedBlock = false;
 
-            // Spieler bewegen (checkCollisions wird als Callback übergeben)
-            this.player.move(
-                this.isPositionOccupied.bind(this),
-                this.checkCollisions.bind(this) // Wird nach der Bewegung aufgerufen
-            );
+            // Prüfe, ob der Spieler versucht, sich zu bewegen und ob ein Block im Weg ist
+            if (this.player.moveDirection.x !== 0 || this.player.moveDirection.y !== 0) {
+                const targetX = currentX + this.player.moveDirection.x;
+                const targetZ = currentZ + this.player.moveDirection.y; // Annahme: y in moveDirection entspricht z im Grid
 
-            // Aktualisiere die 'vorherige' Position für den nächsten Frame,
-            // *nachdem* die Bewegung für diesen Frame versucht wurde.
-            if (this.player.gridX !== currentX || this.player.gridZ !== currentZ) {
-                // Nur wenn sich der Spieler tatsächlich bewegt hat
-                this.previousPlayerGridX = currentX;
-                this.previousPlayerGridZ = currentZ;
-                // console.log(`Spieler bewegt. Vorherige Pos: (${this.previousPlayerGridX}, ${this.previousPlayerGridZ}), Aktuelle Pos: (${this.player.gridX}, ${this.player.gridZ})`);
+                // Versuche zuerst, einen Block an der Zielposition aufzusammeln
+                collectedBlock = this.tryCollectBlock(targetX, targetZ);
             }
 
-            // Gegner bewegen
+            // Nur bewegen, wenn kein Block aufgesammelt wurde
+            if (!collectedBlock) {
+                this.player.move(
+                    this.isPositionOccupied.bind(this),
+                    this.checkCollisions.bind(this)
+                );
+            }
+
+            // Aktualisiere die 'vorherige' Position für den nächsten Frame,
+            // *nachdem* die Bewegung (oder Sammelaktion) für diesen Frame versucht wurde.
+            if (this.player.gridX !== currentX || this.player.gridZ !== currentZ || collectedBlock) {
+                // Position für nächsten Frame speichern (auch wenn nur gesammelt wurde)
+                this.previousPlayerGridX = currentX;
+                this.previousPlayerGridZ = currentZ;
+            }
+
+            // Gegner bewegen (nach Spieleraktion)
             this.moveEnemies();
+            
+            // Kollisionen mit Gegnern nach deren Bewegung prüfen (bereits vorhanden)
+             for (const enemy of this.enemies) {
+                 if (enemy.checkCollisionWithPlayer(this.player, this.isPositionOccupied.bind(this), this.enemies)) {
+                     // Verhindere wiederholtes Leben verlieren im selben Frame
+                     if (!this.lostLifeThisFrame) { 
+                          this.soundGenerator.playEnemyCollision();
+                          this.loseLife();
+                          this.lostLifeThisFrame = true; // Markiere, dass Leben verloren wurde
+                     }
+                 }
+             }
+             this.lostLifeThisFrame = false; // Setze für nächsten Frame zurück
+
         }
     }
     
@@ -445,16 +469,16 @@ export class GameController {
      * Platziert einen Block an der Position, die der Spieler ZULETZT verlassen hat
      */
     placeBlock() {
-        // Prüfe, ob der Spieler Blöcke hat und ob Spieler existiert
-        if (!this.player || this.playerBlocks <= 0) {
-            if (this.player) this.soundGenerator.playError(); // Nur Sound, wenn Spieler existiert
-            console.log("Platzieren fehlgeschlagen: Keine Blöcke im Inventar.");
+        // Prüfe, ob der Spieler Blöcke hat
+        if (this.playerBlocks <= 0) {
+             console.log("Platzieren fehlgeschlagen: Keine Blöcke mehr.");
+             this.soundGenerator.playError();
             return;
         }
 
         // Zielposition ist die *vorherige* Position des Spielers
-        const targetX = this.previousPlayerGridX;
-        const targetZ = this.previousPlayerGridZ;
+        const targetX = this.player.gridX + this.player.facingDirection.x;
+        const targetZ = this.player.gridZ + this.player.facingDirection.z; // Annahme: facingDirection hat x/z
 
          // Zusätzliche Sicherheitsprüfung: Stelle sicher, dass die vorherige Position nicht die aktuelle ist
          // (sollte durch die Update-Logik abgedeckt sein, aber sicher ist sicher)
@@ -465,8 +489,17 @@ export class GameController {
          }
 
 
-        // Prüfe, ob die Zielposition bereits belegt ist
-        if (this.isPositionOccupied(targetX, targetZ)) {
+        // Prüfe, ob die Zielposition bereits belegt ist (Wand, anderer Block, Fass, etc.)
+        // Wichtig: Nicht nur isPositionOccupied verwenden, da wir hier auch Items prüfen müssen!
+        const occupiedByWall = this.walls.some(wall => wall.gridX === targetX && wall.gridZ === targetZ);
+        const occupiedByPlacedBlock = this.blocks.some(block => block.gridX === targetX && block.gridZ === targetZ);
+        const occupiedByCollectible = this.collectibleBlocks.some(item => !item.collected && item.gridX === targetX && item.gridZ === targetZ);
+        const occupiedByPlutonium = this.plutoniumItems.some(item => !item.collected && item.gridX === targetX && item.gridZ === targetZ);
+        const occupiedByBarrel = this.barrels.some(item => !item.collected && item.gridX === targetX && item.gridZ === targetZ);
+        const occupiedByExit = this.exit.visible && this.exit.gridX === targetX && this.exit.gridZ === targetZ;
+        const occupiedByEnemy = this.enemies.some(enemy => enemy.gridX === targetX && enemy.gridZ === targetZ); // Prüfe auch Gegnerpositionen
+
+        if (occupiedByWall || occupiedByPlacedBlock || occupiedByCollectible || occupiedByPlutonium || occupiedByBarrel || occupiedByExit || occupiedByEnemy) {
              console.log(`Platzieren fehlgeschlagen: Position (${targetX}, ${targetZ}) ist belegt.`);
              this.soundGenerator.playError(); // Position belegt Sound
              return;
@@ -475,7 +508,11 @@ export class GameController {
         // Platziere den Block
         this.playerBlocks--;
         const newBlock = new PlacedBlock(this.gameWorld, targetX, targetZ);
-        this.blocks.push(newBlock); // Füge den neuen Block zur Liste der platzierten Blöcke hinzu
+        
+        // Füge den neuen Block zu BEIDEN Listen hinzu:
+        this.blocks.push(newBlock); // Als Hindernis für Kollisionsprüfung (z.B. für Gegner)
+        this.placedCollectibleBlocks.push(newBlock); // Als sammelbares Item für den Spieler
+
         this.soundGenerator.playPlaceBlock();
         this.updateUI(); // UI aktualisieren, um die Blockanzahl zu zeigen
 
@@ -670,5 +707,57 @@ export class GameController {
      */
     onWindowResize() {
         // Wird von der Game-Instanz implementiert
+    }
+
+    /**
+     * Versucht, einen Block an der gegebenen Position aufzusammeln.
+     * Prüft sowohl ursprünglich generierte als auch platzierte Blöcke.
+     * @param {number} x - Die X-Koordinate im Grid.
+     * @param {number} z - Die Z-Koordinate im Grid.
+     * @returns {boolean} - True, wenn ein Block erfolgreich aufgesammelt wurde, sonst false.
+     */
+    tryCollectBlock(x, z) {
+        let blockToCollect = null;
+        let listToRemoveFrom = null;
+        let indexToRemove = -1;
+
+        // Prüfe zuerst die platzierten Blöcke
+        indexToRemove = this.placedCollectibleBlocks.findIndex(block => !block.collected && block.gridX === x && block.gridZ === z);
+        if (indexToRemove !== -1) {
+            blockToCollect = this.placedCollectibleBlocks[indexToRemove];
+            listToRemoveFrom = this.placedCollectibleBlocks;
+        } else {
+            // Prüfe dann die ursprünglich generierten Blöcke
+            indexToRemove = this.collectibleBlocks.findIndex(block => !block.collected && block.gridX === x && block.gridZ === z);
+            if (indexToRemove !== -1) {
+                blockToCollect = this.collectibleBlocks[indexToRemove];
+                listToRemoveFrom = this.collectibleBlocks;
+            }
+        }
+
+        if (blockToCollect) {
+            // Block gefunden - aufsammeln
+            this.playerBlocks++;
+            blockToCollect.remove(); // Visuell entfernen (mesh entfernen)
+
+            // Aus der Sammelliste entfernen
+            listToRemoveFrom.splice(indexToRemove, 1);
+
+            // WICHTIG: Auch aus der Hindernisliste `this.blocks` entfernen, falls er dort war
+            // Dies ist entscheidend für platzierte Blöcke.
+            const obstacleIndex = this.blocks.findIndex(b => b === blockToCollect);
+            if (obstacleIndex !== -1) {
+                this.blocks.splice(obstacleIndex, 1);
+            }
+
+            // Sound und UI
+            this.soundGenerator.playCollectBlock(); // Annahme: Diese Methode existiert oder wird hinzugefügt
+            this.updateUI();
+
+            console.log(`Block aufgesammelt bei (${x}, ${z}). Verbleibende Blöcke: ${this.playerBlocks}`);
+            return true; // Erfolgreich aufgesammelt
+        }
+
+        return false; // Kein Block zum Aufsammeln gefunden
     }
 } 

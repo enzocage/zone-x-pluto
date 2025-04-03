@@ -165,7 +165,7 @@ export class CollectibleBlock extends Item {
  * Repräsentiert einen vom Spieler platzierten Block
  * Dient als Hindernis für Gegner und kann Wege blockieren oder neue erschaffen
  */
-export class PlacedBlock {
+export class PlacedBlock extends Item {
     /**
      * Erstellt einen neuen platzierten Block
      * @param {Object} gameWorld - Die Spielwelt-Gruppe, in der der Block platziert wird
@@ -173,20 +173,18 @@ export class PlacedBlock {
      * @param {number} gridZ - Z-Position im Grid
      */
     constructor(gameWorld, gridX, gridZ) {
-        this.gridX = gridX;
-        this.gridZ = gridZ;
-        this.gameWorld = gameWorld;
+        super(gameWorld, gridX, gridZ);
         
         this.mesh = this.createMesh();
     }
     
     /**
      * Erstellt das 3D-Mesh für den platzierten Block
-     * Erzeugt einen grauen Würfel, der den Block darstellt
+     * Erzeugt einen flachen Würfel, der einen Block darstellt
      * @returns {Object} - Das erstellte Three.js-Mesh
      */
     createMesh() {
-        const geometry = new THREE.BoxGeometry(CELL_SIZE, CELL_SIZE * 0.3, CELL_SIZE);
+        const geometry = new THREE.BoxGeometry(CELL_SIZE * 0.5, CELL_SIZE * 0.1, CELL_SIZE * 0.5);
         const material = new THREE.MeshLambertMaterial({ color: 0xaaaaaa });
         
         const mesh = new THREE.Mesh(geometry, material);
@@ -194,16 +192,5 @@ export class PlacedBlock {
         this.gameWorld.add(mesh);
         
         return mesh;
-    }
-    
-    /**
-     * Entfernt den Block aus der Szene
-     * Bereinigt Ressourcen, wenn der Block nicht mehr benötigt wird
-     */
-    remove() {
-        if (this.mesh) {
-            this.gameWorld.remove(this.mesh);
-            this.mesh = null;
-        }
     }
 } 

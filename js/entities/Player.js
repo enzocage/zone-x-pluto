@@ -19,7 +19,8 @@ export class Player {
         this.gridZ = gridZ;
         this.scene = scene;
         this.gameWorld = gameWorld;
-        this.moveDirection = { x: 0, y: 0 };
+        this.moveDirection = { x: 0, y: 0 }; // Behält die aktuelle Eingabe
+        this.facingDirection = { x: 0, z: 1 }; // Letzte Richtung, in die geschaut wurde (Standard: unten)
         this.isMoving = false;
         this.targetPosition = null;
         this.moveSpeed = PLAYER_MOVE_SPEED;
@@ -71,12 +72,19 @@ export class Player {
     /**
      * Setzt die Bewegungsrichtung des Spielers
      * Wird von den Tastatur-Event-Handlern aufgerufen
+     * Aktualisiert auch die Blickrichtung (facingDirection), wenn eine Bewegung initiiert wird.
      * @param {number} x - X-Komponente der Bewegungsrichtung (-1, 0, 1)
      * @param {number} y - Y-Komponente der Bewegungsrichtung (-1, 0, 1)
      */
     setMoveDirection(x, y) {
         this.moveDirection.x = x;
         this.moveDirection.y = y;
+
+        // Aktualisiere die Blickrichtung nur, wenn eine tatsächliche Bewegung stattfindet
+        if (x !== 0 || y !== 0) {
+            this.facingDirection.x = x;
+            this.facingDirection.z = y; // y-Eingabe entspricht z-Achse im Grid
+        }
     }
     
     /**
