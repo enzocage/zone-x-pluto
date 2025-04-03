@@ -2,11 +2,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { GameController } from '../modules/GameController.js';
 import { Player } from '../entities/Player.js';
 import { Enemy } from '../entities/Enemy.js';
-import { Plutonium, Barrel, CollectibleBlock, PlacedBlock } from '../entities/Item.js';
-import { LevelGenerator } from './LevelGenerator.js';
-import { UIController } from './UIController.js';
-import { SoundGenerator } from './SoundGenerator.js';
+import { Plutonium, Barrel, CollectibleBlock, PlacedBlock, Item } from '../entities/Item.js';
+import { LevelGenerator } from '../modules/LevelGenerator.js';
+import { UIController } from '../modules/UIController.js';
+import { SoundGenerator } from '../modules/SoundGenerator.js';
 import { PLAYER_START_LIVES, PLAYER_START_BLOCKS, PLUTONIUM_TIMER, PLAYER_START_POSITION, CELL_SIZE } from '../config/config.js';
+import { Wall } from '../entities/Wall.js';
 
 // --- Mocks für Module und Klassen ---
 
@@ -16,14 +17,17 @@ vi.mock('../entities/Player.js', () => {
   PlayerMock.prototype.move = vi.fn();
   PlayerMock.prototype.setMoveDirection = vi.fn();
   PlayerMock.prototype.reset = vi.fn();
-  PlayerMock.prototype.onMove = vi.fn(); // Mock für den Event-Listener
-  PlayerMock.prototype.onWindowResize = vi.fn(); // Mock für die Methode
-  // Standard-Eigenschaften für den Mock
-  PlayerMock.prototype.gridX = PLAYER_START_POSITION.x;
-  PlayerMock.prototype.gridZ = PLAYER_START_POSITION.z;
+  PlayerMock.prototype.onMove = vi.fn((callback) => { PlayerMock._onMoveCallback = callback; });
+  PlayerMock.prototype.triggerMove = () => { if (PlayerMock._onMoveCallback) PlayerMock._onMoveCallback(); };
+  PlayerMock.prototype.onWindowResize = vi.fn();
+  PlayerMock.prototype.gridX = 0;
+  PlayerMock.prototype.gridZ = 0;
   PlayerMock.prototype.isMoving = false;
-  PlayerMock.prototype.moveDirection = { x: 0, y: 0 }; // y wird als z interpretiert
+  PlayerMock.prototype.moveDirection = { x: 0, y: 0 };
   PlayerMock.prototype.lastMoveDirection = { x: 0, y: 0 };
+  PlayerMock.prototype.occupiedCells = [];
+  PlayerMock.prototype.mesh = { position: { x: 0, y: 0, z: 0 } };
+  PlayerMock.prototype.facingDirection = { x: 0, z: 1 };
   return { Player: PlayerMock };
 });
 
@@ -31,78 +35,72 @@ vi.mock('../entities/Player.js', () => {
 vi.mock('../entities/Enemy.js', () => {
   const EnemyMock = vi.fn();
   EnemyMock.prototype.move = vi.fn();
-  EnemyMock.prototype.checkCollisionWithPlayer = vi.fn().mockReturnValue(false); // Standard: keine Kollision
+  EnemyMock.prototype.checkCollisionWithPlayer = vi.fn().mockReturnValue(false);
   EnemyMock.prototype.remove = vi.fn();
   EnemyMock.prototype.isMoving = false;
   EnemyMock.prototype.gridX = 0;
   EnemyMock.prototype.gridZ = 0;
   EnemyMock.prototype.occupiedCells = [];
+  EnemyMock.prototype.mesh = { position: { x: 0, y: 0, z: 0 } };
+  EnemyMock.prototype.reverseDirection = vi.fn();
   return { Enemy: EnemyMock };
 });
 
 // Mock Items
-vi.mock('../entities/Item.js', () => ({
-    Plutonium: vi.fn().mockImplementation((gw, x, z) => ({ gridX: x, gridZ: z, collected: false, remove: vi.fn(), collect: vi.fn(), mesh: { visible: true } })),
-    Barrel: vi.fn().mockImplementation((gw, x, z) => ({ gridX: x, gridZ: z, remove: vi.fn() })),
-    CollectibleBlock: vi.fn().mockImplementation((gw, x, z) => ({ gridX: x, gridZ: z, collected: false, remove: vi.fn(), collect: vi.fn(), mesh: { visible: true } })),
-    PlacedBlock: vi.fn().mockImplementation((gw, x, z) => ({ gridX: x, gridZ: z, remove: vi.fn() }))
-}));
+vi.mock('../entities/Item.js', () => {
+    // Helper für Collision Check (vereinfacht)
+    const checkCollision = (item, player) => player.gridX === item.gridX && player.gridZ === item.gridZ;
 
-// Mock LevelGenerator
-vi.mock('./LevelGenerator.js', () => ({
-    LevelGenerator: vi.fn().mockImplementation(() => ({
-        generateLevel: vi.fn(),
-        isPositionOccupiedByWalls: vi.fn().mockReturnValue(false) // Standard: Nichts blockiert durch Wände
-    }))
-}));
+    return {
+        Plutonium: vi.fn().mockImplementation((gw, x, z) => ({
+            gridX: x, gridZ: z, collected: false, remove: vi.fn(), collect: vi.fn(), mesh: { visible: true },
+            checkCollisionWithPlayer: function(player) { return checkCollision(this, player); } // Collision Check
+        })),
+        Barrel: vi.fn().mockImplementation((gw, x, z) => ({
+            gridX: x, gridZ: z, remove: vi.fn(), mesh: {},
+            checkCollisionWithPlayer: function(player) { return checkCollision(this, player); } // Collision Check
+        })),
+        CollectibleBlock: vi.fn().mockImplementation((gw, x, z) => ({
+            gridX: x, gridZ: z, collected: false, remove: vi.fn(), collect: vi.fn(), mesh: { visible: true },
+            checkCollisionWithPlayer: function(player) { return checkCollision(this, player); } // Collision Check
+        })),
+        PlacedBlock: vi.fn().mockImplementation((gw, x, z) => ({
+            gridX: x, gridZ: z, remove: vi.fn(), mesh: {},
+            // PlacedBlock braucht keinen checkCollisionWithPlayer in GameController
+        }))
+    };
+});
 
-// Mock UIController
-vi.mock('./UIController.js', () => ({
-    UIController: vi.fn().mockImplementation(() => ({
-        init: vi.fn(),
-        updateTimer: vi.fn(),
-        updatePlutonium: vi.fn(),
-        updateLives: vi.fn(),
-        updateBlocks: vi.fn(),
-        updateScore: vi.fn()
-    }))
-}));
+// Mock Wall
+vi.mock('../entities/Wall.js');
 
-// Mock SoundGenerator
-vi.mock('./SoundGenerator.js', () => ({
-    SoundGenerator: vi.fn().mockImplementation(() => ({
-        init: vi.fn(),
-        playPlayerMove: vi.fn(),
-        playBlockPlace: vi.fn(),
-        playBlockPickup: vi.fn(),
-        playCollectPlutonium: vi.fn(),
-        playDeliverPlutonium: vi.fn(),
-        playEnemyCollision: vi.fn(),
-        playLevelComplete: vi.fn(),
-        playError: vi.fn(),
-        playPlutoniumTimerWarning: vi.fn(),
-    }))
-}));
+// Auto-mock LevelGenerator, UIController, SoundGenerator
+vi.mock('../modules/LevelGenerator.js');
+vi.mock('../modules/UIController.js');
+vi.mock('../modules/SoundGenerator.js');
 
-// Mock THREE.Group und Exit Mesh
+// Definiere Mocks außerhalb der Factory für Reset in beforeEach
 const mockGameWorld = {
     add: vi.fn(),
     remove: vi.fn(),
-    children: [], // Wichtig für clearLevel
+    children: [],
 };
 const mockExitMesh = {
     position: { set: vi.fn() },
     visible: false,
-    gridX: 27, // Beispielwert aus Code
-    gridZ: 27,
 };
-// Mock THREE global
-vi.stubGlobal('THREE', {
-    Group: vi.fn().mockImplementation(() => mockGameWorld),
-    Mesh: vi.fn().mockImplementation(() => mockExitMesh), // Mock Mesh für Exit
-    BoxGeometry: vi.fn(),
-    MeshLambertMaterial: vi.fn(),
-    Color: vi.fn(),
+
+// Mock THREE lokal für diese Testsuite
+vi.mock('three', async (importOriginal) => {
+    const originalThree = await importOriginal();
+    return {
+        ...originalThree,
+        Mesh: vi.fn(() => mockExitMesh),
+        BoxGeometry: vi.fn(),
+        MeshLambertMaterial: vi.fn(),
+        Group: vi.fn(() => mockGameWorld),
+        Color: vi.fn(),
+    };
 });
 
 // --- Tests für GameController ---
@@ -111,30 +109,42 @@ describe('GameController', () => {
     let gameController;
     let mockScene;
 
-    beforeEach(() => {
-        // Mock für die Szene
+    beforeEach(async () => {
+        const THREE = await import('three');
+        const { Player } = await import('../entities/Player.js');
+        const { Enemy } = await import('../entities/Enemy.js');
+        const { LevelGenerator } = await import('../modules/LevelGenerator.js');
+        const { UIController } = await import('../modules/UIController.js');
+        const { SoundGenerator } = await import('../modules/SoundGenerator.js');
+        const { Wall } = await import('../entities/Wall.js');
+
         mockScene = {
             add: vi.fn(),
             remove: vi.fn(),
         };
 
-        // Mocks zurücksetzen
         vi.clearAllMocks();
+
         mockGameWorld.add.mockClear();
         mockGameWorld.remove.mockClear();
         mockGameWorld.children = [];
+        mockExitMesh.position.set.mockClear();
         mockExitMesh.visible = false;
-        // Reset Player mock defaults if necessary
+
         Player.prototype.gridX = PLAYER_START_POSITION.x;
         Player.prototype.gridZ = PLAYER_START_POSITION.z;
+        Player.prototype.isMoving = false;
         Player.prototype.moveDirection = { x: 0, y: 0 };
         Player.prototype.lastMoveDirection = { x: 0, y: 0 };
+        Player.prototype.occupiedCells = [{ x: Player.prototype.gridX, z: Player.prototype.gridZ }];
+        Player.prototype.mesh = { position: { x: Player.prototype.gridX * CELL_SIZE, y: 0, z: Player.prototype.gridZ * CELL_SIZE } };
+        Player._onMoveCallback = undefined;
 
+        Enemy.prototype.occupiedCells = [];
+        Enemy.prototype.mesh = { position: { x: 0, y: 0, z: 0 } };
 
-        // GameController initialisieren
         gameController = new GameController(mockScene);
 
-        // Timer mocken
         vi.useFakeTimers();
     });
 
@@ -145,6 +155,7 @@ describe('GameController', () => {
 
     it('should initialize correctly', () => {
         expect(gameController.scene).toBe(mockScene);
+        expect(THREE.Group).toHaveBeenCalledTimes(1);
         expect(gameController.gameWorld).toBe(mockGameWorld);
         expect(mockScene.add).toHaveBeenCalledWith(mockGameWorld);
         expect(gameController.levelGenerator).toBeInstanceOf(LevelGenerator);
@@ -156,6 +167,7 @@ describe('GameController', () => {
         expect(gameController.playerScore).toBe(0);
         expect(gameController.plutoniumCollected).toBe(false);
         expect(gameController.remainingPlutonium).toBe(5);
+        expect(gameController.exit).toBeNull();
     });
 
     describe('init', () => {
@@ -187,6 +199,9 @@ describe('GameController', () => {
             expect(spyClearLevel).toHaveBeenCalledTimes(1);
             expect(spyCreatePlayer).toHaveBeenCalledTimes(1);
             expect(spyCreateExit).toHaveBeenCalledTimes(1);
+            expect(THREE.Mesh).toHaveBeenCalledTimes(1);
+            expect(gameController.exit).toBe(mockExitMesh);
+
             expect(spyLevelGen).toHaveBeenCalledWith(
                 2,
                 gameController.walls,
@@ -196,34 +211,35 @@ describe('GameController', () => {
                 gameController.collectibleBlocks
             );
             expect(spyUpdateUI).toHaveBeenCalledTimes(1);
+            expect(Player).toHaveBeenCalledTimes(1);
         });
     });
 
     describe('clearLevel', () => {
         it('should remove all entities and clear arrays', () => {
-            const mockWall = { remove: vi.fn() };
-            const mockEnemy = { remove: vi.fn() };
-            const mockPlutonium = { remove: vi.fn() };
-            const mockBarrel = { remove: vi.fn() };
-            const mockBlock = { remove: vi.fn() };
-            const mockCollectible = { remove: vi.fn() };
-            gameController.walls = [mockWall];
-            gameController.enemies = [mockEnemy];
-            gameController.plutoniumItems = [mockPlutonium];
-            gameController.barrels = [mockBarrel];
-            gameController.blocks = [mockBlock];
-            gameController.collectibleBlocks = [mockCollectible];
+            const mockWallInstance = { remove: vi.fn() };
+            const mockEnemyInstance = { remove: vi.fn() };
+            const mockPlutoniumInstance = { remove: vi.fn() };
+            const mockBarrelInstance = { remove: vi.fn() };
+            const mockPlacedBlockInstance = { remove: vi.fn() };
+            const mockCollectibleInstance = { remove: vi.fn() };
+            gameController.walls = [mockWallInstance];
+            gameController.enemies = [mockEnemyInstance];
+            gameController.plutoniumItems = [mockPlutoniumInstance];
+            gameController.barrels = [mockBarrelInstance];
+            gameController.blocks = [mockPlacedBlockInstance];
+            gameController.collectibleBlocks = [mockCollectibleInstance];
             gameController.exit = mockExitMesh;
-            mockGameWorld.children = [mockWall, mockEnemy, mockPlutonium, mockBarrel, mockBlock, mockCollectible, mockExitMesh];
+            mockGameWorld.children = [mockWallInstance.mesh, mockEnemyInstance.mesh, mockPlutoniumInstance.mesh, mockBarrelInstance.mesh, mockPlacedBlockInstance.mesh, mockCollectibleInstance.mesh, mockExitMesh];
 
             gameController.clearLevel();
 
-            expect(mockWall.remove).toHaveBeenCalledTimes(1);
-            expect(mockEnemy.remove).toHaveBeenCalledTimes(1);
-            expect(mockPlutonium.remove).toHaveBeenCalledTimes(1);
-            expect(mockBarrel.remove).toHaveBeenCalledTimes(1);
-            expect(mockBlock.remove).toHaveBeenCalledTimes(1);
-            expect(mockCollectible.remove).toHaveBeenCalledTimes(1);
+            expect(mockWallInstance.remove).toHaveBeenCalledTimes(1);
+            expect(mockEnemyInstance.remove).toHaveBeenCalledTimes(1);
+            expect(mockPlutoniumInstance.remove).toHaveBeenCalledTimes(1);
+            expect(mockBarrelInstance.remove).toHaveBeenCalledTimes(1);
+            expect(mockPlacedBlockInstance.remove).toHaveBeenCalledTimes(1);
+            expect(mockCollectibleInstance.remove).toHaveBeenCalledTimes(1);
             expect(mockGameWorld.remove).toHaveBeenCalledWith(mockExitMesh);
 
             expect(gameController.walls).toEqual([]);
@@ -233,27 +249,33 @@ describe('GameController', () => {
             expect(gameController.blocks).toEqual([]);
             expect(gameController.collectibleBlocks).toEqual([]);
             expect(gameController.placedCollectibleBlocks).toEqual([]);
+            expect(gameController.exit).toBeNull();
         });
     });
-
 
     describe('createPlayer', () => {
         it('should create a player instance and register move callback', () => {
             gameController.createPlayer();
+
             expect(Player).toHaveBeenCalledTimes(1);
+            expect(Player).toHaveBeenCalledWith(gameController.gameWorld, PLAYER_START_POSITION.x, PLAYER_START_POSITION.z, expect.any(Function));
             expect(gameController.player).toBeInstanceOf(Player);
             expect(gameController.player.onMove).toHaveBeenCalledWith(expect.any(Function));
 
-            const moveCallback = gameController.player.onMove.mock.calls[0][0];
-            moveCallback();
-            expect(gameController.soundGenerator.playPlayerMove).toHaveBeenCalledTimes(1);
+            const spyPlayMove = vi.spyOn(gameController.soundGenerator, 'playPlayerMove');
+            gameController.player.triggerMove();
+            expect(spyPlayMove).toHaveBeenCalledTimes(1);
         });
     });
 
     describe('createExit', () => {
         it('should create an exit mesh at the correct position and hide it', () => {
             gameController.createExit();
+
             expect(THREE.Mesh).toHaveBeenCalledTimes(1);
+            expect(THREE.BoxGeometry).toHaveBeenCalledTimes(1);
+            expect(THREE.MeshLambertMaterial).toHaveBeenCalledTimes(1);
+            expect(mockExitMesh.position.set).toHaveBeenCalledTimes(1);
             expect(gameController.exit).toBe(mockExitMesh);
             expect(mockExitMesh.position.set).toHaveBeenCalledWith(27 * CELL_SIZE + CELL_SIZE/2, 0.5, 27 * CELL_SIZE + CELL_SIZE/2);
             expect(mockExitMesh.visible).toBe(false);

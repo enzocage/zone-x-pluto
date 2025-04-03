@@ -2,10 +2,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Enemy } from '../entities/Enemy.js';
 import { CELL_SIZE, ENEMY_MIN_SPEED, ENEMY_SPEED_VARIATION } from '../config/config.js';
 
-// Mock für gameWorld
-const createMockGameWorld = () => ({
-  add: vi.fn(),
-  remove: vi.fn(), // Auch wenn nicht explizit in Enemy gesehen, zur Sicherheit
+// --- Mock THREE global für diese Datei ---
+const mockMesh = {
+    position: { set: vi.fn(), x: 0, y: 0, z: 0 },
+    material: { color: { set: vi.fn() } }
+};
+const mockGameWorld = {
+    add: vi.fn(),
+    remove: vi.fn()
+};
+vi.stubGlobal('THREE', {
+    Mesh: vi.fn(() => mockMesh),
+    ConeGeometry: vi.fn(),
+    MeshLambertMaterial: vi.fn(() => ({ color: { set: vi.fn() } })),
+    Color: vi.fn(),
+    // Fügen Sie hier weitere benötigte THREE-Teile hinzu
 });
 
 // Mock für isPositionOccupied

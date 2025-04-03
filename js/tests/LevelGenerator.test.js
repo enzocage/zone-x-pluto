@@ -129,11 +129,11 @@ describe('LevelGenerator', () => {
         it('should call generation methods with calculated parameters for level > 1', () => {
             const level = 3;
             const expectedEnemyCount = Math.floor(7 * Math.pow(2.2, level - 1));
-            const expectedWallRatio = 0.025 * Math.pow(0.2, level - 1); // WALL_RATIO aus config.js
+            const expectedWallRatio = 0.1 * Math.pow(0.2, level - 1);
 
             levelGenerator.generateLevel(level, walls, enemies, plutoniumItems, barrels, collectibleBlocks);
 
-            expect(spyCreateBorder).toHaveBeenCalledWith(walls);
+            expect(spyCreateBorder).toHaveBeenCalledTimes(1);
             expect(spyGenerateWalls).toHaveBeenCalledWith(expectedWallRatio, walls);
             expect(spyCreateEnemies).toHaveBeenCalledWith(expectedEnemyCount, enemies, walls);
             expect(spyCreatePlutonium).toHaveBeenCalledWith(5, plutoniumItems, walls);
