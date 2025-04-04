@@ -120,6 +120,24 @@ export class LevelGenerator2 {
      * @param {Array} grid - Zweidimensionales Array zur Darstellung des Spielfelds
      */
     generateWalls(gridWidth, gridHeight, wallCount, walls, grid) {
+        // Stellen Sie sicher, dass der Startbereich (2,2) und direkt angrenzende Felder frei bleiben
+        const keepClearZones = [
+            {x: 2, z: 2}, // Startposition
+            {x: 2, z: 1}, // Nördlich
+            {x: 3, z: 2}, // Östlich
+            {x: 2, z: 3}, // Südlich
+            {x: 1, z: 2}  // Westlich
+        ];
+        
+        // Exit-Bereich in der gegenüberliegenden Ecke freihalten
+        const exitX = gridWidth - 3;
+        const exitZ = gridHeight - 3;
+        keepClearZones.push({x: exitX, z: exitZ});
+        keepClearZones.push({x: exitX-1, z: exitZ});
+        keepClearZones.push({x: exitX+1, z: exitZ});
+        keepClearZones.push({x: exitX, z: exitZ-1});
+        keepClearZones.push({x: exitX, z: exitZ+1});
+        
         // 20% der Wände zufällig platzieren
         const randomWallCount = Math.floor(wallCount * 0.2);
         let placedRandomWalls = 0;
@@ -128,8 +146,8 @@ export class LevelGenerator2 {
             const x = Math.floor(Math.random() * (gridWidth - 2)) + 1;
             const z = Math.floor(Math.random() * (gridHeight - 2)) + 1;
             
-            // Prüfen, ob Position frei ist
-            if (!grid[x][z]) {
+            // Prüfen, ob Position frei ist und nicht in einer Freihalte-Zone liegt
+            if (!grid[x][z] && !keepClearZones.some(pos => pos.x === x && pos.z === z)) {
                 walls.push(new Wall(this.gameWorld, x, z));
                 grid[x][z] = true;
                 placedRandomWalls++;
@@ -178,6 +196,11 @@ export class LevelGenerator2 {
                 
                 // Position bereits belegt
                 if (grid[pos.x][pos.z]) {
+                    return false;
+                }
+                
+                // Position liegt in einer Freihalte-Zone
+                if (keepClearZones.some(clearPos => clearPos.x === pos.x && clearPos.z === pos.z)) {
                     return false;
                 }
                 
@@ -359,32 +382,57 @@ export class LevelGenerator2 {
     }
     
     /**
-     * Platziert eine Entität an einer zufälligen freien Position
+     * Platziert ein Entity an einer zufälligen freien Position
      * @param {number} gridWidth - Breite des Spielfelds
      * @param {number} gridHeight - Höhe des Spielfelds
      * @param {Array} grid - Zweidimensionales Array zur Darstellung des Spielfelds
-     * @param {Function} createEntity - Callback-Funktion zum Erstellen der Entität
+     * @param {Function} createEntity - Callback-Funktion zum Erstellen des Entitys
+     * @returns {Object} - Die Koordinaten des erstellten Entitys oder null, wenn kein Platz gefunden wurde
      */
     placeEntityRandomly(gridWidth, gridHeight, grid, createEntity) {
-        let attempts = 0;
+        // Definiere die Freihalte-Zonen für Start und Exit
+        const keepClearZones = [
+            {x: 2, z: 2}, // Startposition
+            {x: 2, z: 1}, // Angrenzende Zellen
+            {x: 3, z: 2},
+            {x: 2, z: 3},
+            {x: 1, z: 2}
+        ];
+        
+        // Exit-Bereich
+        const exitX = gridWidth - 3;
+        const exitZ = gridHeight - 3;
+        keepClearZones.push({x: exitX, z: exitZ});
+        
+        // Maximale Anzahl an Versuchen, um eine freie Position zu finden
         const maxAttempts = 100;
+        let attempts = 0;
         
         while (attempts < maxAttempts) {
+            attempts++;
+            
+            // Zufällige Position innerhalb des Spielfelds (nicht am Rand)
             const x = Math.floor(Math.random() * (gridWidth - 2)) + 1;
             const z = Math.floor(Math.random() * (gridHeight - 2)) + 1;
             
             // Prüfen, ob Position frei ist
             if (!grid[x][z]) {
+                // Prüfen, ob Position in einer Freihalte-Zone liegt
+                if (keepClearZones.some(pos => pos.x === x && pos.z === z)) {
+                    continue; // Position ist in Freihalte-Zone, versuche es erneut
+                }
+                
+                // Position ist frei und nicht in Freihalte-Zone - Entity erstellen
                 createEntity(x, z);
-                // Markiert die Zelle als belegt (nicht für Wände, aber für Entities)
-                // Für die Platzierung weiterer Elemente
+                
+                // Markiert die Zelle als belegt für die Platzierung weiterer Elemente
                 grid[x][z] = 'entity';
-                return;
+                
+                return { x, z };
             }
-            
-            attempts++;
         }
         
-        console.warn("Konnte keine freie Position für eine Entität finden");
+        console.warn('Konnte keine freie Position für Entity finden.');
+        return null;
     }
 } 

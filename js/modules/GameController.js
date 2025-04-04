@@ -134,11 +134,29 @@ export class GameController {
      * Erzeugt eine neue Spieler-Instanz an der Startposition
      */
     createPlayer() {
+        // Startposition an das jeweilige Level anpassen 
+        // Verwende die Basisgröße des LevelGenerator2, falls dieser gewählt wurde
+        let startX = PLAYER_START_POSITION.x;
+        let startZ = PLAYER_START_POSITION.z;
+        
+        // Wenn LevelGenerator2 verwendet wird, passe die Startposition an
+        if (this.levelGenerator instanceof LevelGenerator2) {
+            // Berechne die Spielfeldgröße für das aktuelle Level
+            const { gridWidth, gridHeight } = this.levelGenerator.calculateGridSize(this.currentLevel);
+            
+            // Setze die Startposition auf einen sicheren Punkt innerhalb der Grenzen
+            // z.B. immer bei Position (2,2) - sicher innerhalb der Grenzen
+            startX = 2;
+            startZ = 2;
+            
+            console.log(`LevelGenerator2: Angepasste Startposition (${startX}, ${startZ}) für Spielfeldgröße ${gridWidth}x${gridHeight}`);
+        }
+        
         this.player = new Player(
             this.scene, 
             this.gameWorld, 
-            PLAYER_START_POSITION.x, 
-            PLAYER_START_POSITION.z
+            startX, 
+            startZ
         );
         
         // Bewegungs-Sound-Callback registrieren
@@ -156,8 +174,21 @@ export class GameController {
         const material = new THREE.MeshLambertMaterial({ color: 0xff0000 });
         
         // Genaue Raster-Koordinaten für den Exit festlegen
-        const exitGridX = 27;
-        const exitGridZ = 27;
+        let exitGridX = 27;
+        let exitGridZ = 27;
+        
+        // Wenn LevelGenerator2 verwendet wird, passe die Exit-Position an
+        if (this.levelGenerator instanceof LevelGenerator2) {
+            // Berechne die Spielfeldgröße für das aktuelle Level
+            const { gridWidth, gridHeight } = this.levelGenerator.calculateGridSize(this.currentLevel);
+            
+            // Setze die Exit-Position auf einen Punkt nahe der entgegengesetzten Ecke
+            // aber innerhalb der Spielfeldgrenzen (z.B. 2 Felder vom Rand entfernt)
+            exitGridX = gridWidth - 3;
+            exitGridZ = gridHeight - 3;
+            
+            console.log(`LevelGenerator2: Angepasster Exit bei (${exitGridX}, ${exitGridZ}) für Spielfeldgröße ${gridWidth}x${gridHeight}`);
+        }
         
         this.exit = new THREE.Mesh(geometry, material);
         // Präzise Positionierung auf den Rasterpunkt

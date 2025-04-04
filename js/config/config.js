@@ -16,8 +16,8 @@ export const PLAYER_MOVE_SPEED = 0.13;
 
 // Gegner-Konfiguration
 export const INITIAL_ENEMIES = 0;
-export const ENEMY_MIN_SPEED = 0.03;
-export const ENEMY_SPEED_VARIATION = 0.06;
+export const ENEMY_MIN_SPEED = 0.003;
+export const ENEMY_SPEED_VARIATION = 0.036;
 export const ENEMY_COLLISION_THRESHOLD = 0.8; // Kollisionsbereich für Gegner (als Anteil von CELL_SIZE)
 
 // Level-Konfiguration
