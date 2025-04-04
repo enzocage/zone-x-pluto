@@ -1,13 +1,12 @@
 /**
  * Level-Generator-2-Modul
- * Alternative Implementierung für die Generierung von Spielleveln
- * Diese Klasse ist ein Platzhalter für zukünftige Entwicklungen
+ * Dynamische Generierung von Spielleveln basierend auf aufsteigender Schwierigkeit
+ * Erstellt Levels mit unterschiedlichen Größen und Komplexitätsgraden
  */
 
-import { GRID_WIDTH, GRID_HEIGHT, WALL_RATIO } from '../config/config.js';
-import { Wall } from '../entities/Wall.js';
 import { Enemy } from '../entities/Enemy.js';
 import { Plutonium, Barrel, CollectibleBlock } from '../entities/Item.js';
+import { Wall } from '../entities/Wall.js';
 
 export class LevelGenerator2 {
     /**
@@ -16,13 +15,27 @@ export class LevelGenerator2 {
      */
     constructor(gameWorld) {
         this.gameWorld = gameWorld;
+        this.maxLevels = 25;
+        this.baseGridWidth = 16;
+        this.baseGridHeight = 9;
+    }
+    
+    /**
+     * Berechnet die Spielfeldgröße für das aktuelle Level
+     * @param {number} level - Die aktuelle Levelnummer
+     * @returns {Object} - Ein Objekt mit gridWidth und gridHeight Eigenschaften
+     */
+    calculateGridSize(level) {
+        // Beginnt mit 16x9 und erhöht sich mit jedem Level um 10%
+        const scaleFactor = 1 + (level - 1) * 0.1;
+        const gridWidth = Math.round(this.baseGridWidth * scaleFactor);
+        const gridHeight = Math.round(this.baseGridHeight * scaleFactor);
+        
+        return { gridWidth, gridHeight };
     }
     
     /**
      * Erstellt ein neues Level mit allen Elementen
-     * Diese Methode bietet die gleiche Schnittstelle wie der erste Level-Generator,
-     * kann aber in Zukunft mit einer anderen Implementierung versehen werden.
-     * 
      * @param {number} level - Die Levelnummer, beeinflusst die Schwierigkeit
      * @param {Array} walls - Array zum Speichern der generierten Wände
      * @param {Array} enemies - Array zum Speichern der generierten Gegner
@@ -31,69 +44,216 @@ export class LevelGenerator2 {
      * @param {Array} collectibleBlocks - Array zum Speichern der generierten sammelbaren Blöcke
      */
     generateLevel(level, walls, enemies, plutoniumItems, barrels, collectibleBlocks) {
-        // In dieser Version wird einfach der erste Level-Generator verwendet
-        // Eine Nachricht zur Verdeutlichung wird in der Konsole ausgegeben
-        console.log("Level-Generator 2 ist nur ein Platzhalter und verwendet aktuell die gleiche Logik wie Level-Generator 1");
+        console.log(`Erzeuge Level ${level} mit LevelGenerator2`);
         
-        // Parameter basierend auf Level anpassen
-        // Auch für Level 1 eine angemessene Anzahl von Gegnern und Wanddichte garantieren
-        const enemyCount = level === 1 ? 15 : Math.floor(7 * Math.pow(2.2, level - 1));
-        const wallRatio = level === 1 ? WALL_RATIO : WALL_RATIO * Math.pow(0.2, level - 1);
+        // Spielfeldgröße für das aktuelle Level berechnen
+        const { gridWidth, gridHeight } = this.calculateGridSize(level);
+        console.log(`Spielfeldgröße: ${gridWidth}x${gridHeight}`);
         
-        // Spielfeld umranden mit Wänden
-        this.createBorder(walls);
+        // Grid erstellen und mit false initialisieren (false = kein Wandelement)
+        const grid = Array(gridWidth).fill().map(() => Array(gridHeight).fill(false));
         
-        // Innere Wände generieren
-        this.generateWalls(wallRatio, walls);
+        // Spielfeldbegrenzung erstellen
+        this.createBorder(gridWidth, gridHeight, walls, grid);
         
-        // Objekte platzieren
-        this.createEnemies(enemyCount, enemies, walls);
-        this.createPlutonium(5, plutoniumItems, walls);
-        this.createBarrels(3, barrels, walls);
-        this.createCollectibleBlocks(10 + Math.floor(Math.random() * 6), collectibleBlocks, walls);
+        // Anzahl der internen Wandelemente berechnen
+        const gridSize = gridWidth * gridHeight;
+        const wallCount = Math.round(gridSize / (25 / level));
+        console.log(`Anzahl der internen Wandelemente: ${wallCount}`);
+        
+        // Wandelemente erstellen
+        this.generateWalls(gridWidth, gridHeight, wallCount, walls, grid);
+        
+        // Startposition (wird nicht als eigenes Element gesetzt, nur für Berechnung)
+        const startX = 1;
+        const startZ = 1;
+        
+        // Spielelemente erstellen
+        
+        // Gegner
+        const enemyCount = Math.round(5 * Math.pow(1.2, level - 1));
+        this.createEnemies(gridWidth, gridHeight, enemyCount, enemies, grid);
+        
+        // Plutonium
+        const plutoniumCount = Math.round(5 * Math.pow(1.15, level - 1));
+        this.createPlutonium(gridWidth, gridHeight, plutoniumCount, plutoniumItems, grid);
+        
+        // Sammelbare Blöcke (Mats)
+        const matsCount = Math.round(5 * Math.pow(1.2, level - 1));
+        this.createCollectibleBlocks(gridWidth, gridHeight, matsCount, collectibleBlocks, grid);
+        
+        // Tonnen - konstant 5
+        this.createBarrels(gridWidth, gridHeight, 5, barrels, grid);
     }
     
     /**
      * Erstellt eine Begrenzung um das Spielfeld
-     * Eine Wand wird um das gesamte Spielfeld herum platziert
+     * @param {number} gridWidth - Breite des Spielfelds
+     * @param {number} gridHeight - Höhe des Spielfelds
      * @param {Array} walls - Array zum Speichern der generierten Wände
+     * @param {Array} grid - Zweidimensionales Array zur Darstellung des Spielfelds
      */
-    createBorder(walls) {
+    createBorder(gridWidth, gridHeight, walls, grid) {
         // Obere und untere Grenzen
-        for (let x = 0; x < GRID_WIDTH; x++) {
+        for (let x = 0; x < gridWidth; x++) {
             walls.push(new Wall(this.gameWorld, x, 0));
-            walls.push(new Wall(this.gameWorld, x, GRID_HEIGHT - 1));
+            walls.push(new Wall(this.gameWorld, x, gridHeight - 1));
+            grid[x][0] = true;
+            grid[x][gridHeight - 1] = true;
         }
         
         // Linke und rechte Grenzen
-        for (let z = 1; z < GRID_HEIGHT - 1; z++) {
+        for (let z = 1; z < gridHeight - 1; z++) {
             walls.push(new Wall(this.gameWorld, 0, z));
-            walls.push(new Wall(this.gameWorld, GRID_WIDTH - 1, z));
+            walls.push(new Wall(this.gameWorld, gridWidth - 1, z));
+            grid[0][z] = true;
+            grid[gridWidth - 1][z] = true;
         }
     }
     
     /**
-     * Prüft, ob eine Position von einer Wand belegt ist
+     * Generiert die inneren Wände des Spielfelds
+     * @param {number} gridWidth - Breite des Spielfelds
+     * @param {number} gridHeight - Höhe des Spielfelds
+     * @param {number} wallCount - Anzahl der zu erzeugenden Wände
+     * @param {Array} walls - Array zum Speichern der generierten Wände
+     * @param {Array} grid - Zweidimensionales Array zur Darstellung des Spielfelds
+     */
+    generateWalls(gridWidth, gridHeight, wallCount, walls, grid) {
+        // 20% der Wände zufällig platzieren
+        const randomWallCount = Math.floor(wallCount * 0.2);
+        let placedRandomWalls = 0;
+        
+        while (placedRandomWalls < randomWallCount) {
+            const x = Math.floor(Math.random() * (gridWidth - 2)) + 1;
+            const z = Math.floor(Math.random() * (gridHeight - 2)) + 1;
+            
+            // Prüfen, ob Position frei ist
+            if (!grid[x][z]) {
+                walls.push(new Wall(this.gameWorld, x, z));
+                grid[x][z] = true;
+                placedRandomWalls++;
+            }
+        }
+        
+        // 80% der Wände angrenzend an vorhandene Wände platzieren
+        let remainingWalls = wallCount - randomWallCount;
+        let iterationCount = 0;
+        const maxIterations = 1000; // Sicherheits-Abbruchbedingung
+        
+        while (remainingWalls > 0 && iterationCount < maxIterations) {
+            iterationCount++;
+            
+            // Finde alle vorhandenen nicht-Rand-Wände
+            const internalWalls = [];
+            for (let x = 1; x < gridWidth - 1; x++) {
+                for (let z = 1; z < gridHeight - 1; z++) {
+                    if (grid[x][z]) {
+                        internalWalls.push({ x, z });
+                    }
+                }
+            }
+            
+            if (internalWalls.length === 0) {
+                break; // Keine internen Wände gefunden
+            }
+            
+            // Wähle zufällig eine Wand aus
+            const randomWall = internalWalls[Math.floor(Math.random() * internalWalls.length)];
+            
+            // Finde alle freien angrenzenden Positionen
+            const adjacentPositions = [
+                { x: randomWall.x + 1, z: randomWall.z },
+                { x: randomWall.x - 1, z: randomWall.z },
+                { x: randomWall.x, z: randomWall.z + 1 },
+                { x: randomWall.x, z: randomWall.z - 1 }
+            ];
+            
+            // Filtere gültige Positionen
+            const validPositions = adjacentPositions.filter(pos => {
+                // Position im Grid
+                if (pos.x <= 0 || pos.x >= gridWidth - 1 || pos.z <= 0 || pos.z >= gridHeight - 1) {
+                    return false;
+                }
+                
+                // Position bereits belegt
+                if (grid[pos.x][pos.z]) {
+                    return false;
+                }
+                
+                // Prüfen, wie viele Wandelemente angrenzend sind
+                const neighborCount = this.countAdjacentWalls(pos.x, pos.z, grid);
+                if (neighborCount > 4) {
+                    return false;
+                }
+                
+                // Prüfen, ob das Level nach Platzierung noch vollständig zugänglich wäre
+                const tempGrid = JSON.parse(JSON.stringify(grid));
+                tempGrid[pos.x][pos.z] = true;
+                
+                return this.isLevelFullyAccessible(tempGrid, 1, 1, gridWidth, gridHeight);
+            });
+            
+            // Wenn gültige Positionen gefunden wurden, eine auswählen und Wand platzieren
+            if (validPositions.length > 0) {
+                const newWallPos = validPositions[Math.floor(Math.random() * validPositions.length)];
+                walls.push(new Wall(this.gameWorld, newWallPos.x, newWallPos.z));
+                grid[newWallPos.x][newWallPos.z] = true;
+                remainingWalls--;
+            } else {
+                // Wenn keine gültige Position gefunden wurde, einen Versuch überspringen
+                if (iterationCount % 10 === 0) {
+                    remainingWalls--;
+                }
+            }
+        }
+    }
+    
+    /**
+     * Zählt angrenzende Wandelemente
      * @param {number} x - X-Koordinate
      * @param {number} z - Z-Koordinate
-     * @param {Array} walls - Array mit allen Wänden
-     * @returns {boolean} - true, wenn die Position von einer Wand belegt ist
+     * @param {Array} grid - Zweidimensionales Array zur Darstellung des Spielfelds
+     * @returns {number} - Anzahl angrenzender Wandelemente
      */
-    isPositionOccupiedByWalls(x, z, walls) {
-        return walls.some(wall => wall.gridX === x && wall.gridZ === z);
+    countAdjacentWalls(x, z, grid) {
+        let count = 0;
+        
+        // Alle 8 möglichen Nachbarpositionen überprüfen
+        const neighbors = [
+            { x: x+1, z: z },   // rechts
+            { x: x-1, z: z },   // links
+            { x: x, z: z+1 },   // unten
+            { x: x, z: z-1 },   // oben
+            { x: x+1, z: z+1 }, // rechts unten
+            { x: x+1, z: z-1 }, // rechts oben
+            { x: x-1, z: z+1 }, // links unten
+            { x: x-1, z: z-1 }  // links oben
+        ];
+        
+        for (const neighbor of neighbors) {
+            if (neighbor.x >= 0 && neighbor.x < grid.length && 
+                neighbor.z >= 0 && neighbor.z < grid[0].length && 
+                grid[neighbor.x][neighbor.z]) {
+                count++;
+            }
+        }
+        
+        return count;
     }
     
     /**
      * Prüft, ob das Level vollständig zugänglich ist
-     * Verwendet einen Floodfill-Algorithmus, um sicherzustellen, dass alle Bereiche erreichbar sind
-     * @param {Array} grid - Zweidimensionales Array, das den Zustand des Spielfelds darstellt
+     * @param {Array} grid - Zweidimensionales Array zur Darstellung des Spielfelds
      * @param {number} startX - X-Koordinate des Startpunkts
      * @param {number} startZ - Z-Koordinate des Startpunkts
+     * @param {number} gridWidth - Breite des Spielfelds
+     * @param {number} gridHeight - Höhe des Spielfelds
      * @returns {boolean} - true, wenn alle Bereiche erreichbar sind
      */
-    isLevelFullyAccessible(grid, startX, startZ) {
+    isLevelFullyAccessible(grid, startX, startZ, gridWidth, gridHeight) {
         // Erreichbarkeits-Grid erstellen
-        let accessGrid = Array(GRID_WIDTH).fill().map(() => Array(GRID_HEIGHT).fill(false));
+        let accessGrid = Array(gridWidth).fill().map(() => Array(gridHeight).fill(false));
         
         // Floodfill-Algorithmus
         let queue = [{x: startX, z: startZ}];
@@ -102,7 +262,7 @@ export class LevelGenerator2 {
         while (queue.length > 0) {
             let {x, z} = queue.shift();
             
-            // Alle vier Nachbarn prüfen
+            // Alle vier Nachbarn prüfen (nur horizontal und vertikal)
             let neighbors = [
                 {x: x+1, z},
                 {x: x-1, z},
@@ -111,8 +271,8 @@ export class LevelGenerator2 {
             ];
             
             for (let neighbor of neighbors) {
-                if (neighbor.x > 0 && neighbor.x < GRID_WIDTH - 1 &&
-                    neighbor.z > 0 && neighbor.z < GRID_HEIGHT - 1 &&
+                if (neighbor.x > 0 && neighbor.x < gridWidth - 1 &&
+                    neighbor.z > 0 && neighbor.z < gridHeight - 1 &&
                     !grid[neighbor.x][neighbor.z] &&
                     !accessGrid[neighbor.x][neighbor.z]) {
                     
@@ -123,8 +283,8 @@ export class LevelGenerator2 {
         }
         
         // Prüfen, ob alle freien Zellen erreichbar sind
-        for (let x = 1; x < GRID_WIDTH - 1; x++) {
-            for (let z = 1; z < GRID_HEIGHT - 1; z++) {
+        for (let x = 1; x < gridWidth - 1; x++) {
+            for (let z = 1; z < gridHeight - 1; z++) {
                 if (!grid[x][z] && !accessGrid[x][z]) {
                     return false;
                 }
@@ -135,122 +295,96 @@ export class LevelGenerator2 {
     }
     
     /**
-     * Generiert die inneren Wände des Spielfelds
-     * Erstellt Hindernisse und Labyrinthe im Spielfeld
-     * Stellt sicher, dass alle Bereiche des Spielfelds erreichbar bleiben
-     * @param {number} ratio - Die Wahrscheinlichkeit für Wandplatzierung (0-1)
-     * @param {Array} walls - Array zum Speichern der generierten Wände
-     */
-    generateWalls(ratio, walls) {
-        // Zweidimensionales Array zur Darstellung des Spielfelds
-        let grid = Array(GRID_WIDTH).fill().map(() => Array(GRID_HEIGHT).fill(false));
-        
-        // Bestehende Wände in das Raster eintragen
-        for (const wall of walls) {
-            grid[wall.gridX][wall.gridZ] = true;
-        }
-        
-        // Spieler-Startpunkt markieren
-        const startX = 2;
-        const startZ = 2;
-        
-        for (let x = 2; x < GRID_WIDTH - 2; x++) {
-            for (let z = 2; z < GRID_HEIGHT - 2; z++) {
-                // Prüfen, ob die Position bereits von einer Wand belegt ist
-                if (!this.isPositionOccupiedByWalls(x, z, walls) && 
-                    Math.random() < ratio && 
-                    // Keine Wand am Spieler-Startpunkt
-                    !(x === startX && z === startZ)) {
-                    
-                    // Wand temporär hinzufügen
-                    grid[x][z] = true;
-                    
-                    // Prüfen, ob noch alle Bereiche erreichbar sind
-                    if (this.isLevelFullyAccessible(grid, startX, startZ)) {
-                        walls.push(new Wall(this.gameWorld, x, z));
-                    } else {
-                        // Wand wieder entfernen, wenn sie Bereiche unzugänglich macht
-                        grid[x][z] = false;
-                    }
-                }
-            }
-        }
-    }
-    
-    /**
      * Erstellt die Gegner im Spielfeld
+     * @param {number} gridWidth - Breite des Spielfelds
+     * @param {number} gridHeight - Höhe des Spielfelds
+     * @param {number} count - Anzahl zu erstellender Gegner
+     * @param {Array} enemies - Array zum Speichern der generierten Gegner
+     * @param {Array} grid - Zweidimensionales Array zur Darstellung des Spielfelds
      */
-    createEnemies(count, enemies, walls) {
+    createEnemies(gridWidth, gridHeight, count, enemies, grid) {
         for (let i = 0; i < count; i++) {
-            let x, z;
-            let validPosition = false;
-            
-            // Gültige Position finden (nicht auf Wänden oder anderen Objekten)
-            while (!validPosition) {
-                x = Math.floor(Math.random() * (GRID_WIDTH - 4)) + 2;
-                z = Math.floor(Math.random() * (GRID_HEIGHT - 4)) + 2;
-                
-                validPosition = !this.isPositionOccupiedByWalls(x, z, walls);
-            }
-            
-            enemies.push(new Enemy(this.gameWorld, x, z));
+            this.placeEntityRandomly(gridWidth, gridHeight, grid, (x, z) => {
+                enemies.push(new Enemy(this.gameWorld, x, z));
+            });
         }
     }
     
     /**
      * Erstellt Plutonium-Items im Spielfeld
+     * @param {number} gridWidth - Breite des Spielfelds
+     * @param {number} gridHeight - Höhe des Spielfelds
+     * @param {number} count - Anzahl zu erstellender Plutonium-Items
+     * @param {Array} plutoniumItems - Array zum Speichern der generierten Plutonium-Items
+     * @param {Array} grid - Zweidimensionales Array zur Darstellung des Spielfelds
      */
-    createPlutonium(count, plutoniumItems, walls) {
+    createPlutonium(gridWidth, gridHeight, count, plutoniumItems, grid) {
         for (let i = 0; i < count; i++) {
-            let x, z;
-            let validPosition = false;
-            
-            while (!validPosition) {
-                x = Math.floor(Math.random() * (GRID_WIDTH - 4)) + 2;
-                z = Math.floor(Math.random() * (GRID_HEIGHT - 4)) + 2;
-                
-                validPosition = !this.isPositionOccupiedByWalls(x, z, walls);
-            }
-            
-            plutoniumItems.push(new Plutonium(this.gameWorld, x, z));
+            this.placeEntityRandomly(gridWidth, gridHeight, grid, (x, z) => {
+                plutoniumItems.push(new Plutonium(this.gameWorld, x, z));
+            });
         }
     }
     
     /**
      * Erstellt Tonnen im Spielfeld
+     * @param {number} gridWidth - Breite des Spielfelds
+     * @param {number} gridHeight - Höhe des Spielfelds
+     * @param {number} count - Anzahl zu erstellender Tonnen
+     * @param {Array} barrels - Array zum Speichern der generierten Tonnen
+     * @param {Array} grid - Zweidimensionales Array zur Darstellung des Spielfelds
      */
-    createBarrels(count, barrels, walls) {
+    createBarrels(gridWidth, gridHeight, count, barrels, grid) {
         for (let i = 0; i < count; i++) {
-            let x, z;
-            let validPosition = false;
-            
-            while (!validPosition) {
-                x = Math.floor(Math.random() * (GRID_WIDTH - 4)) + 2;
-                z = Math.floor(Math.random() * (GRID_HEIGHT - 4)) + 2;
-                
-                validPosition = !this.isPositionOccupiedByWalls(x, z, walls);
-            }
-            
-            barrels.push(new Barrel(this.gameWorld, x, z));
+            this.placeEntityRandomly(gridWidth, gridHeight, grid, (x, z) => {
+                barrels.push(new Barrel(this.gameWorld, x, z));
+            });
         }
     }
     
     /**
      * Erstellt sammelbare Blöcke im Spielfeld
+     * @param {number} gridWidth - Breite des Spielfelds
+     * @param {number} gridHeight - Höhe des Spielfelds
+     * @param {number} count - Anzahl zu erstellender sammelbarer Blöcke
+     * @param {Array} collectibleBlocks - Array zum Speichern der generierten sammelbaren Blöcke
+     * @param {Array} grid - Zweidimensionales Array zur Darstellung des Spielfelds
      */
-    createCollectibleBlocks(count, collectibleBlocks, walls) {
+    createCollectibleBlocks(gridWidth, gridHeight, count, collectibleBlocks, grid) {
         for (let i = 0; i < count; i++) {
-            let x, z;
-            let validPosition = false;
+            this.placeEntityRandomly(gridWidth, gridHeight, grid, (x, z) => {
+                collectibleBlocks.push(new CollectibleBlock(this.gameWorld, x, z));
+            });
+        }
+    }
+    
+    /**
+     * Platziert eine Entität an einer zufälligen freien Position
+     * @param {number} gridWidth - Breite des Spielfelds
+     * @param {number} gridHeight - Höhe des Spielfelds
+     * @param {Array} grid - Zweidimensionales Array zur Darstellung des Spielfelds
+     * @param {Function} createEntity - Callback-Funktion zum Erstellen der Entität
+     */
+    placeEntityRandomly(gridWidth, gridHeight, grid, createEntity) {
+        let attempts = 0;
+        const maxAttempts = 100;
+        
+        while (attempts < maxAttempts) {
+            const x = Math.floor(Math.random() * (gridWidth - 2)) + 1;
+            const z = Math.floor(Math.random() * (gridHeight - 2)) + 1;
             
-            while (!validPosition) {
-                x = Math.floor(Math.random() * (GRID_WIDTH - 4)) + 2;
-                z = Math.floor(Math.random() * (GRID_HEIGHT - 4)) + 2;
-                
-                validPosition = !this.isPositionOccupiedByWalls(x, z, walls);
+            // Prüfen, ob Position frei ist
+            if (!grid[x][z]) {
+                createEntity(x, z);
+                // Markiert die Zelle als belegt (nicht für Wände, aber für Entities)
+                // Für die Platzierung weiterer Elemente
+                grid[x][z] = 'entity';
+                return;
             }
             
-            collectibleBlocks.push(new CollectibleBlock(this.gameWorld, x, z));
+            attempts++;
         }
+        
+        console.warn("Konnte keine freie Position für eine Entität finden");
     }
 } 

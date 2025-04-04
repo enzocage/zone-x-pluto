@@ -1,3 +1,4 @@
+class GameController {
 onKeyDown(event) {
     let handled = true; // Assume handled unless proven otherwise
 
@@ -18,6 +19,22 @@ onKeyDown(event) {
         case 'd':
             this.player.setMoveDirection(1, 0); // Nach rechts (positives X)
             break;
+        case '+':
+        case '=':
+            // Zum nächsten Level springen
+            this.currentLevel++;
+            this.generateLevel(this.currentLevel);
+            console.log(`Level gewechselt zu: ${this.currentLevel}`);
+            break;
+        case '-':
+        case '_':
+            // Zum vorherigen Level springen, wenn möglich (nicht unter Level 1)
+            if (this.currentLevel > 1) {
+                this.currentLevel--;
+                this.generateLevel(this.currentLevel);
+                console.log(`Level gewechselt zu: ${this.currentLevel}`);
+            }
+            break;
         // ... potentially other cases ...
         default:
             handled = false; // Key not handled by movement
@@ -30,3 +47,6 @@ onKeyDown(event) {
         event.preventDefault(); // Prevent default browser action (scrolling)
     }
 } 
+}
+
+export { GameController }; 

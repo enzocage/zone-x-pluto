@@ -797,6 +797,24 @@ export class GameController {
                 // Verhindere Standardverhalten der Leertaste (z.B. Scrollen)
                 event.preventDefault();
                 break;
+            case 'Equal': // Taste '+'
+            case 'NumpadAdd':
+                // Zum nächsten Level springen
+                this.currentLevel++;
+                this.generateLevel(this.currentLevel);
+                console.log(`Level gewechselt zu: ${this.currentLevel}`);
+                event.preventDefault();
+                break;
+            case 'Minus': // Taste '-'
+            case 'NumpadSubtract':
+                // Zum vorherigen Level springen, wenn möglich (nicht unter Level 1)
+                if (this.currentLevel > 1) {
+                    this.currentLevel--;
+                    this.generateLevel(this.currentLevel);
+                    console.log(`Level gewechselt zu: ${this.currentLevel}`);
+                }
+                event.preventDefault();
+                break;
             // Beispiel: Neustart-Taste
             // case 'KeyR':
             //     this.resetGame(); // Oder eine spezifischere Neustart-Funktion
