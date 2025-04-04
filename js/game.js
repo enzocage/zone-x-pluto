@@ -5,6 +5,7 @@
  */
 
 import { GameController } from './modules/GameController.js';
+import { MenuController } from './modules/MenuController.js';
 
 export class Game {
     constructor() {
@@ -12,6 +13,8 @@ export class Game {
         this.camera = null;      // Kamera-Objekt
         this.renderer = null;    // Three.js-Renderer
         this.gameController = null; // Spielsteuerung
+        this.menuController = null; // Menüsteuerung
+        this.gameRunning = false; // Flag, ob das Spiel läuft
     }
     
     /**
@@ -25,9 +28,12 @@ export class Game {
         // Licht hinzufügen
         this.addLights();
         
-        // Spielcontroller erstellen
+        // Spielcontroller erstellen (wird erst nach Menüauswahl initialisiert)
         this.gameController = new GameController(this.scene);
-        this.gameController.init();
+        
+        // Menü erstellen und anzeigen
+        this.menuController = new MenuController(this.onLevelGeneratorSelect.bind(this));
+        this.menuController.init();
         
         // Event-Listener für Fenstergröße
         window.addEventListener('resize', this.onWindowResize.bind(this));
@@ -35,6 +41,24 @@ export class Game {
         
         // Animation starten
         this.animate();
+    }
+    
+    /**
+     * Callback-Funktion für die Auswahl eines Level-Generators
+     * Wird aufgerufen, wenn der Benutzer einen Level-Generator im Menü auswählt
+     * @param {number} generatorId - Die ID des ausgewählten Level-Generators
+     */
+    onLevelGeneratorSelect(generatorId) {
+        console.log(`Level-Generator ${generatorId} ausgewählt.`);
+        
+        // Level-Generator im GameController auswählen
+        this.gameController.selectLevelGenerator(generatorId);
+        
+        // Spiel initialisieren
+        this.gameController.init();
+        
+        // Flag setzen, dass das Spiel läuft
+        this.gameRunning = true;
     }
     
     /**
@@ -79,8 +103,8 @@ export class Game {
     animate() {
         requestAnimationFrame(this.animate.bind(this));
         
-        // Spiellogik aktualisieren
-        if (this.gameController) {
+        // Spiellogik aktualisieren, wenn das Spiel läuft
+        if (this.gameRunning && this.gameController) {
             this.gameController.update();
         }
         

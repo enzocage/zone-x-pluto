@@ -14,6 +14,7 @@ import {
 } from '../config/config.js';
 import { Player } from '../entities/Player.js';
 import { LevelGenerator } from './LevelGenerator.js';
+import { LevelGenerator2 } from './LevelGenerator2.js';
 import { PlacedBlock, CollectibleBlock, Plutonium, Barrel } from '../entities/Item.js';
 import { UIController } from './UIController.js';
 import { SoundGenerator } from './SoundGenerator.js';
@@ -57,8 +58,11 @@ export class GameController {
         this.previousPlayerGridX = PLAYER_START_POSITION.x;
         this.previousPlayerGridZ = PLAYER_START_POSITION.z;
         
+        // Level-Generator-Auswahl
+        this.selectedGeneratorId = 1; // Standard: Erster Level-Generator
+        
         // Hilfsobjekte
-        this.levelGenerator = new LevelGenerator(this.gameWorld);
+        this.levelGenerator = null; // Wird basierend auf der Auswahl gesetzt
         this.uiController = new UIController();
         this.soundGenerator = new SoundGenerator();
     }
@@ -73,6 +77,9 @@ export class GameController {
         
         // Sound Generator initialisieren
         this.soundGenerator.init();
+        
+        // Level-Generator auswählen
+        this.selectLevelGenerator(this.selectedGeneratorId);
         
         // Level generieren
         this.generateLevel(this.currentLevel);
@@ -891,5 +898,25 @@ export class GameController {
         }
 
         return false; // Kein Block zum Aufsammeln gefunden
+    }
+
+    /**
+     * Wählt einen Level-Generator aus und instanziiert ihn
+     * @param {number} generatorId - Die ID des Level-Generators (1 oder 2)
+     */
+    selectLevelGenerator(generatorId) {
+        this.selectedGeneratorId = generatorId;
+        
+        if (generatorId === 1) {
+            this.levelGenerator = new LevelGenerator(this.gameWorld);
+            console.log("Level-Generator 1 ausgewählt");
+        } else if (generatorId === 2) {
+            this.levelGenerator = new LevelGenerator2(this.gameWorld);
+            console.log("Level-Generator 2 ausgewählt");
+        } else {
+            console.error("Ungültige Generator-ID:", generatorId);
+            // Fallback zum ersten Generator
+            this.levelGenerator = new LevelGenerator(this.gameWorld);
+        }
     }
 } 
