@@ -124,6 +124,9 @@ export class GameController {
         
         // UI aktualisieren
         this.updateUI();
+        
+        // Spieler in die Bildschirmmitte setzen
+        this.centerPlayerOnScreen();
     }
     
     /**
@@ -602,6 +605,9 @@ export class GameController {
             this.exitReached = false;
             this.levelCompleted = false;
             
+            // Spieler in die Bildschirmmitte setzen
+            this.centerPlayerOnScreen();
+            
             console.log(`Level ${this.currentLevel} gestartet!`);
         }, 2000);
     }
@@ -802,6 +808,8 @@ export class GameController {
                 // Zum nächsten Level springen
                 this.currentLevel++;
                 this.generateLevel(this.currentLevel);
+                // Spieler in die Bildschirmmitte setzen
+                this.centerPlayerOnScreen();
                 console.log(`Level gewechselt zu: ${this.currentLevel}`);
                 event.preventDefault();
                 break;
@@ -811,6 +819,8 @@ export class GameController {
                 if (this.currentLevel > 1) {
                     this.currentLevel--;
                     this.generateLevel(this.currentLevel);
+                    // Spieler in die Bildschirmmitte setzen
+                    this.centerPlayerOnScreen();
                     console.log(`Level gewechselt zu: ${this.currentLevel}`);
                 }
                 event.preventDefault();
@@ -935,6 +945,20 @@ export class GameController {
             console.error("Ungültige Generator-ID:", generatorId);
             // Fallback zum ersten Generator
             this.levelGenerator = new LevelGenerator(this.gameWorld);
+        }
+    }
+
+    /**
+     * Zentriert den Spieler in der Mitte des Bildschirms
+     * Wird nach dem Generieren eines neuen Levels aufgerufen
+     */
+    centerPlayerOnScreen() {
+        if (this.player) {
+            // Welt-Container-Position neu setzen, um Spieler in der Mitte zu positionieren
+            this.gameWorld.position.x = -(this.player.gridX * CELL_SIZE + CELL_SIZE/2);
+            this.gameWorld.position.z = -(this.player.gridZ * CELL_SIZE + CELL_SIZE/2);
+            
+            console.log(`Spieler auf Bildschirmmitte zentriert bei Position (${this.player.gridX}, ${this.player.gridZ})`);
         }
     }
 } 

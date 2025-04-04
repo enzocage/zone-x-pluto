@@ -24,6 +24,8 @@ onKeyDown(event) {
             // Zum nächsten Level springen
             this.currentLevel++;
             this.generateLevel(this.currentLevel);
+            // Spieler in die Bildschirmmitte setzen
+            this.centerPlayerOnScreen();
             console.log(`Level gewechselt zu: ${this.currentLevel}`);
             break;
         case '-':
@@ -32,6 +34,8 @@ onKeyDown(event) {
             if (this.currentLevel > 1) {
                 this.currentLevel--;
                 this.generateLevel(this.currentLevel);
+                // Spieler in die Bildschirmmitte setzen
+                this.centerPlayerOnScreen();
                 console.log(`Level gewechselt zu: ${this.currentLevel}`);
             }
             break;
@@ -46,7 +50,21 @@ onKeyDown(event) {
     if (handled) {
         event.preventDefault(); // Prevent default browser action (scrolling)
     }
-} 
+}
+
+/**
+ * Zentriert den Spieler in der Mitte des Bildschirms
+ * Wird nach dem Generieren eines neuen Levels aufgerufen
+ */
+centerPlayerOnScreen() {
+    if (this.player) {
+        // Welt-Container-Position neu setzen, um Spieler in der Mitte zu positionieren
+        this.gameWorld.position.x = -(this.player.gridX * CELL_SIZE + CELL_SIZE/2);
+        this.gameWorld.position.z = -(this.player.gridZ * CELL_SIZE + CELL_SIZE/2);
+        
+        console.log(`Spieler auf Bildschirmmitte zentriert bei Position (${this.player.gridX}, ${this.player.gridZ})`);
+    }
+}
 }
 
 export { GameController }; 
