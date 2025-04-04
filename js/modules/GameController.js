@@ -228,7 +228,7 @@ export class GameController {
      * Führt die Spiellogik für jeden Frame aus
      * Aktualisiert Spieler- und Gegnerbewegungen, prüft Kollisionen und Sammelaktionen
      */
-    update() {
+    update(deltaTime) {
         if (!this.levelCompleted && this.player) {
             const currentX = this.player.gridX;
             const currentZ = this.player.gridZ;
@@ -275,6 +275,12 @@ export class GameController {
              }
              this.lostLifeThisFrame = false; // Setze für nächsten Frame zurück
 
+        }
+
+        // Exit rotieren, wenn aktiv
+        if (this.exitRotationActive && this.exit) {
+            // Langsame Drehung um die Y-Achse (Höhe)
+            this.exit.rotation.y += 0.01; // Drehgeschwindigkeit anpassen
         }
     }
     
@@ -520,6 +526,9 @@ export class GameController {
         this.exit.visible = true;
         this.exit.material.color.set(0x00ff00); // Startfarbe: Grün
         
+        // Positiven Soundeffekt abspielen, wenn das Exit-Element erscheint
+        this.soundGenerator.playExitAppear();
+        
         // Farbflacker-Effekt für den Exit
         // Wir verändern die Farbe des Exits zwischen verschiedenen auffälligen Farben
         let colorIndex = 0;
@@ -540,6 +549,12 @@ export class GameController {
             colorIndex = (colorIndex + 1) % colors.length;
             this.exit.material.color.set(colors[colorIndex]);
         }, 200); // Schnelleres Flackern als vorher
+        
+        // Permanente Drehung für den Exit hinzufügen
+        this.exitRotationActive = true;
+        
+        // Die Rotation wird in der update-Methode des GameControllers durchgeführt
+        // Da wir regelmäßige Updates des Spielzustands haben
     }
     
     /**

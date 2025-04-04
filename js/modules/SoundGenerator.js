@@ -335,8 +335,8 @@ export class SoundGenerator {
         if (this.muted) return;
         
         // Längere Tondauer für jeden Ton (ursprünglich 0.3 Sekunden, jetzt 0.9 Sekunden)
-        const toneDuration = 0.9;
-        const totalDuration = toneDuration * 3; // Gesamtdauer eines Tons mit Ausklang
+        const toneDuration = 0.1;
+        const totalDuration = toneDuration * 1; // Gesamtdauer eines Tons mit Ausklang
         
         // Erster Ton
         const osc1 = this.audioContext.createOscillator();
@@ -424,5 +424,77 @@ export class SoundGenerator {
         
         oscillator.start();
         oscillator.stop(this.audioContext.currentTime + 2.0);
+    }
+
+    /**
+     * Erzeugt einen positiven Sound, wenn das Exit-Element erscheint
+     */
+    playExitAppear() {
+        if (this.muted) return;
+        
+        // Akkord-Effekt mit mehreren Oszillatoren für ein festliches Gefühl
+        
+        // Hauptton (C5)
+        const osc1 = this.audioContext.createOscillator();
+        const gain1 = this.audioContext.createGain();
+        
+        osc1.type = 'triangle'; // Weicherer Klang
+        osc1.frequency.setValueAtTime(523.25, this.audioContext.currentTime); // C5
+        
+        gain1.gain.setValueAtTime(0.4, this.audioContext.currentTime);
+        gain1.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 1.5);
+        
+        osc1.connect(gain1);
+        gain1.connect(this.masterGainNode);
+        
+        // Terz (E5)
+        const osc2 = this.audioContext.createOscillator();
+        const gain2 = this.audioContext.createGain();
+        
+        osc2.type = 'triangle';
+        osc2.frequency.setValueAtTime(659.26, this.audioContext.currentTime); // E5
+        
+        gain2.gain.setValueAtTime(0.3, this.audioContext.currentTime);
+        gain2.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 1.2);
+        
+        osc2.connect(gain2);
+        gain2.connect(this.masterGainNode);
+        
+        // Quinte (G5)
+        const osc3 = this.audioContext.createOscillator();
+        const gain3 = this.audioContext.createGain();
+        
+        osc3.type = 'triangle';
+        osc3.frequency.setValueAtTime(784.99, this.audioContext.currentTime); // G5
+        
+        gain3.gain.setValueAtTime(0.25, this.audioContext.currentTime);
+        gain3.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 1.0);
+        
+        osc3.connect(gain3);
+        gain3.connect(this.masterGainNode);
+        
+        // Glitzernde Obertöne für zusätzlichen Effekt
+        const osc4 = this.audioContext.createOscillator();
+        const gain4 = this.audioContext.createGain();
+        
+        osc4.type = 'sine';
+        osc4.frequency.setValueAtTime(1046.50, this.audioContext.currentTime); // C6 (eine Oktave höher)
+        
+        gain4.gain.setValueAtTime(0.1, this.audioContext.currentTime);
+        gain4.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.8);
+        
+        osc4.connect(gain4);
+        gain4.connect(this.masterGainNode);
+        
+        // Alle Oszillatoren starten und stoppen
+        osc1.start();
+        osc2.start();
+        osc3.start();
+        osc4.start();
+        
+        osc1.stop(this.audioContext.currentTime + 1.5);
+        osc2.stop(this.audioContext.currentTime + 1.2);
+        osc3.stop(this.audioContext.currentTime + 1.0);
+        osc4.stop(this.audioContext.currentTime + 0.8);
     }
 } 
