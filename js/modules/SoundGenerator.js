@@ -329,57 +329,78 @@ export class SoundGenerator {
     
     /**
      * Erzeugt einen Sound für das Betreten des Ausgangs
+     * Spielt eine heroische Melodie mit 300% längerer Dauer
      */
     playLevelComplete() {
         if (this.muted) return;
+        
+        // Längere Tondauer für jeden Ton (ursprünglich 0.3 Sekunden, jetzt 0.9 Sekunden)
+        const toneDuration = 0.9;
+        const totalDuration = toneDuration * 3; // Gesamtdauer eines Tons mit Ausklang
         
         // Erster Ton
         const osc1 = this.audioContext.createOscillator();
         const gain1 = this.audioContext.createGain();
         
         osc1.type = 'sine';
-        osc1.frequency.setValueAtTime(440, this.audioContext.currentTime);
+        osc1.frequency.setValueAtTime(440, this.audioContext.currentTime); // A4
         
         gain1.gain.setValueAtTime(0.3, this.audioContext.currentTime);
-        gain1.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.3);
+        gain1.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + toneDuration);
         
         osc1.connect(gain1);
         gain1.connect(this.masterGainNode);
         
         osc1.start();
-        osc1.stop(this.audioContext.currentTime + 0.3);
+        osc1.stop(this.audioContext.currentTime + toneDuration);
         
-        // Zweiter Ton (höher)
+        // Zweiter Ton (höher) - Mit Verzögerung für ersten Ton
         const osc2 = this.audioContext.createOscillator();
         const gain2 = this.audioContext.createGain();
         
         osc2.type = 'sine';
-        osc2.frequency.setValueAtTime(660, this.audioContext.currentTime + 0.3);
+        osc2.frequency.setValueAtTime(660, this.audioContext.currentTime + totalDuration); // E5
         
-        gain2.gain.setValueAtTime(0.3, this.audioContext.currentTime + 0.3);
-        gain2.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.6);
+        gain2.gain.setValueAtTime(0.3, this.audioContext.currentTime + totalDuration);
+        gain2.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + totalDuration + toneDuration);
         
         osc2.connect(gain2);
         gain2.connect(this.masterGainNode);
         
-        osc2.start(this.audioContext.currentTime + 0.3);
-        osc2.stop(this.audioContext.currentTime + 0.6);
+        osc2.start(this.audioContext.currentTime + totalDuration);
+        osc2.stop(this.audioContext.currentTime + totalDuration + toneDuration);
         
-        // Dritter Ton (noch höher)
+        // Dritter Ton (noch höher) - Mit Verzögerung für ersten und zweiten Ton
         const osc3 = this.audioContext.createOscillator();
         const gain3 = this.audioContext.createGain();
         
         osc3.type = 'sine';
-        osc3.frequency.setValueAtTime(880, this.audioContext.currentTime + 0.6);
+        osc3.frequency.setValueAtTime(880, this.audioContext.currentTime + 2 * totalDuration); // A5
         
-        gain3.gain.setValueAtTime(0.3, this.audioContext.currentTime + 0.6);
-        gain3.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.9);
+        gain3.gain.setValueAtTime(0.3, this.audioContext.currentTime + 2 * totalDuration);
+        gain3.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 2 * totalDuration + toneDuration);
         
         osc3.connect(gain3);
         gain3.connect(this.masterGainNode);
         
-        osc3.start(this.audioContext.currentTime + 0.6);
-        osc3.stop(this.audioContext.currentTime + 0.9);
+        osc3.start(this.audioContext.currentTime + 2 * totalDuration);
+        osc3.stop(this.audioContext.currentTime + 2 * totalDuration + toneDuration);
+        
+        // Vierter Ton (Fanfare) - Mit Verzögerung für die ersten drei Töne
+        const osc4 = this.audioContext.createOscillator();
+        const gain4 = this.audioContext.createGain();
+        
+        osc4.type = 'square'; // Andere Wellenform für besseren Klang
+        osc4.frequency.setValueAtTime(1320, this.audioContext.currentTime + 3 * totalDuration); // E6
+        
+        gain4.gain.setValueAtTime(0.2, this.audioContext.currentTime + 3 * totalDuration);
+        gain4.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 3 * totalDuration + toneDuration * 1.5);
+        
+        osc4.connect(gain4);
+        gain4.connect(this.masterGainNode);
+        
+        osc4.start(this.audioContext.currentTime + 3 * totalDuration);
+        osc4.stop(this.audioContext.currentTime + 3 * totalDuration + toneDuration * 1.5);
     }
     
     /**

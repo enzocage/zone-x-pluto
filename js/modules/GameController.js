@@ -507,16 +507,39 @@ export class GameController {
     
     /**
      * Aktiviert den Ausgang, nachdem alle Plutonium-Proben abgeliefert wurden
-     * Macht den Ausgang sichtbar und fügt einen Blinkeffekt hinzu
+     * Macht den Ausgang sichtbar und fügt einen Farbflacker-Effekt hinzu
      */
     activateExit() {
-        this.exit.visible = true;
-        this.exit.material.color.set(0x00ff00);
+        // Prüfen, ob tatsächlich alle Plutonium-Proben abgeliefert wurden
+        if (this.remainingPlutonium > 0) {
+            console.log("Exit kann noch nicht aktiviert werden: Es sind noch Plutonium-Proben übrig.");
+            return;
+        }
         
-        // Blinkeffekt für den Exit
-        const blinkInterval = setInterval(() => {
-            this.exit.visible = !this.exit.visible;
-        }, 500);
+        // Exit sichtbar machen, aber nicht mehr blinkend
+        this.exit.visible = true;
+        this.exit.material.color.set(0x00ff00); // Startfarbe: Grün
+        
+        // Farbflacker-Effekt für den Exit
+        // Wir verändern die Farbe des Exits zwischen verschiedenen auffälligen Farben
+        let colorIndex = 0;
+        const colors = [
+            0x00ff00, // Grün
+            0xff00ff, // Magenta
+            0xffff00  // Gelb
+        ];
+        
+        // Flacker-Intervall einrichten
+        const colorInterval = setInterval(() => {
+            if (!this.exit || !this.exit.material) {
+                clearInterval(colorInterval); // Aufräumen, wenn Exit nicht mehr vorhanden
+                return;
+            }
+            
+            // Zur nächsten Farbe wechseln
+            colorIndex = (colorIndex + 1) % colors.length;
+            this.exit.material.color.set(colors[colorIndex]);
+        }, 200); // Schnelleres Flackern als vorher
     }
     
     /**
