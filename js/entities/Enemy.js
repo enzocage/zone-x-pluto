@@ -76,6 +76,12 @@ export class Enemy {
      * @param {Object} player - Spieler-Objekt für Kollisionsprüfung
      */
     move(isPositionOccupied, enemies, player) {
+        // Sicherheitsprüfung für ungültige Parameter
+        if (!isPositionOccupied || !Array.isArray(enemies)) {
+            console.error('Enemy.move: Ungültige Parameter', { isPositionOccupied, enemiesValid: Array.isArray(enemies) });
+            return;
+        }
+        
         // Wenn Gegner aktuell nicht in Bewegung ist, setze neues Ziel
         if (!this.isMoving) {
             // Zeit-basierte kleine Zufallsänderungen, um Synchronisierungen zu verhindern
@@ -96,35 +102,32 @@ export class Enemy {
                 }
             }
             
-            // Prüfen, ob ein Nachbarfeld frei ist
-            const freeDirection = this.findFreeDirection(isPositionOccupied, enemies, player);
+            // Nächste Zielposition berechnen (wohin der Gegner gehen möchte)
+            const nextGridX = this.gridX + this.direction.x;
+            const nextGridZ = this.gridZ + this.direction.z;
             
-            if (freeDirection) {
-                // Freie Richtung gefunden
-                this.direction = freeDirection;
-                
-                // Nächste Grid-Position berechnen
-                const nextGridX = this.gridX + this.direction.x;
-                const nextGridZ = this.gridZ + this.direction.z;
-                
-                // Speichern der letzten Richtung
-                this.lastDirection = { ... this.direction };
-                
-                // Bewegung starten
-                this.targetX = nextGridX;
-                this.targetZ = nextGridZ;
-                this.isMoving = true;
-                
-                // Beide Zellen als belegt markieren (Start und Ziel)
-                this.occupiedCells = [
-                    { x: this.gridX, z: this.gridZ },
-                    { x: this.targetX, z: this.targetZ }
-                ];
-            } else {
-                // Kein freies Feld gefunden, warten
-                // Aktuelles Feld als einziges belegtes Feld markieren
-                this.occupiedCells = [{ x: this.gridX, z: this.gridZ }];
+            // Prüfen ob der nächste Schritt auf ein Hindernis (Wand) trifft
+            if (isPositionOccupied(nextGridX, nextGridZ)) {
+                // Wand erkannt - wir müssen die Richtung ändern
+                // Einfach die Richtung umkehren ohne komplexe Logik
+                this.changeDirectionAwayFromWall(isPositionOccupied);
+                return; // Beende die Methode, da wir die Richtung geändert haben
             }
+            
+            // Setze die Bewegung zum Ziel fort, wenn keine Wand im Weg ist
+            // Speichern der letzten Richtung
+            this.lastDirection = { ... this.direction };
+            
+            // Bewegung starten
+            this.targetX = nextGridX;
+            this.targetZ = nextGridZ;
+            this.isMoving = true;
+            
+            // Beide Zellen als belegt markieren (Start und Ziel)
+            this.occupiedCells = [
+                { x: this.gridX, z: this.gridZ },
+                { x: this.targetX, z: this.targetZ }
+            ];
         }
         
         // Wenn Gegner in Bewegung ist, bewege ihn zum Ziel
@@ -170,14 +173,59 @@ export class Enemy {
     }
     
     /**
+     * Vereinfachte Methode zum Ändern der Richtung, wenn eine Wand erkannt wird
+     * Wählt eine zufällige Richtung, die nicht in die Wand führt
+     * @param {Function} isPositionOccupied - Callback-Funktion zum Prüfen, ob die Zielposition belegt ist
+     */
+    changeDirectionAwayFromWall(isPositionOccupied) {
+        // Alle vier Richtungen
+        const directions = [
+            { x: 1, z: 0 },  // rechts
+            { x: -1, z: 0 }, // links
+            { x: 0, z: 1 },  // unten
+            { x: 0, z: -1 }  // oben
+        ];
+        
+        // Filtere nur freie Richtungen, in die der Gegner gehen kann
+        const freeDirections = directions.filter(dir => {
+            const nextX = this.gridX + dir.x;
+            const nextZ = this.gridZ + dir.z;
+            return !isPositionOccupied(nextX, nextZ);
+        });
+        
+        if (freeDirections.length > 0) {
+            // Wähle zufällig eine der freien Richtungen
+            const randomDirection = freeDirections[Math.floor(Math.random() * freeDirections.length)];
+            this.direction = { ...randomDirection };
+            this.lastDirection = { ...randomDirection };
+        } else {
+            // Wenn keine freie Richtung gefunden wurde, ändere trotzdem die Richtung zufällig
+            // um ein Festsitzen zu vermeiden
+            const randomDirection = directions[Math.floor(Math.random() * directions.length)];
+            this.direction = { ...randomDirection };
+            this.lastDirection = { ...randomDirection };
+        }
+        
+        // Stelle sicher, dass der Gegner nicht in Bewegung ist
+        this.isMoving = false;
+    }
+    
+    /**
      * Findet eine freie Richtung für die nächste Bewegung
      * @param {Function} isPositionOccupied - Callback-Funktion zum Prüfen, ob die Zielposition belegt ist
      * @param {Array} enemies - Liste aller Gegner für Kollisionsprüfung
      * @param {Object} player - Spieler-Objekt für Kollisionsprüfung
      * @param {boolean} randomOrder - Ob die Richtungen in zufälliger Reihenfolge geprüft werden sollen
+     * @param {Object} avoidDirection - Optionale Richtung, die vermieden werden soll (z.B. nach Kollision)
      * @returns {Object|null} - Freie Richtung als {x, z}-Objekt oder null, wenn keine Richtung frei ist
      */
-    findFreeDirection(isPositionOccupied, enemies, player, randomOrder = false) {
+    findFreeDirection(isPositionOccupied, enemies, player, randomOrder = false, avoidDirection = null) {
+        // Sicherheitsprüfung für ungültige Parameter
+        if (!isPositionOccupied || !Array.isArray(enemies)) {
+            console.error('Enemy.findFreeDirection: Ungültige Parameter');
+            return null;
+        }
+        
         // Alle möglichen Richtungen
         const directions = [
             { x: 1, z: 0 },  // rechts
@@ -186,16 +234,28 @@ export class Enemy {
             { x: 0, z: -1 }  // oben
         ];
         
+        // Wenn eine zu vermeidende Richtung angegeben wurde, entferne sie aus den Optionen
+        let filteredDirections = directions;
+        if (avoidDirection) {
+            filteredDirections = directions.filter(dir => 
+                !(dir.x === avoidDirection.x && dir.z === avoidDirection.z)
+            );
+        }
+        
         let shuffledDirections;
         
         if (randomOrder) {
             // Zufällige Reihenfolge für Kollisionsbehandlung
-            shuffledDirections = [...directions].sort(() => Math.random() - 0.5);
+            shuffledDirections = [...filteredDirections].sort(() => Math.random() - 0.5);
         } else {
-            // Bevorzugt die aktuelle Richtung bei normaler Bewegung
-            shuffledDirections = [this.direction, ...directions.filter(dir => 
-                !(dir.x === this.direction.x && dir.z === this.direction.z)
-            )];
+            // Bevorzugt die aktuelle Richtung bei normaler Bewegung, wenn sie nicht vermieden werden soll
+            if (!avoidDirection || !(this.direction.x === avoidDirection.x && this.direction.z === avoidDirection.z)) {
+                shuffledDirections = [this.direction, ...filteredDirections.filter(dir => 
+                    !(dir.x === this.direction.x && dir.z === this.direction.z)
+                )];
+            } else {
+                shuffledDirections = filteredDirections;
+            }
         }
         
         // Prüfen, welche Richtungen frei sind
@@ -280,6 +340,11 @@ export class Enemy {
      * @returns {boolean} - true, wenn eine Kollision erkannt wurde
      */
     checkCollisionWithEnemies(enemies, isPositionOccupied, player) {
+        // Sicherheitsprüfung für ungültige Parameter
+        if (!Array.isArray(enemies) || !isPositionOccupied) {
+            return false;
+        }
+        
         let collisionDetected = false;
         
         for (const otherEnemy of enemies) {
@@ -288,16 +353,24 @@ export class Enemy {
             
             // Prüfe, ob beide auf der gleichen Grid-Position sind
             if (this.gridX === otherEnemy.gridX && this.gridZ === otherEnemy.gridZ) {
-                console.log('Kollision zwischen Gegnern erkannt!');
-                
-                // Aktiv trennen statt nur Richtung umkehren
-                this.separateEnemies(otherEnemy);
-                
-                // Neue Richtung bei Kollision suchen
-                this.handleCollision(isPositionOccupied, enemies, player);
-                otherEnemy.handleCollision(isPositionOccupied, enemies, player);
-                
-                collisionDetected = true;
+                // Vermeide zu häufige Kollisionserkennung mit Cooldown
+                if (!this.lastCollisionTime || Date.now() - this.lastCollisionTime > 1000) {
+                    console.log('Kollision zwischen Gegnern erkannt!');
+                    this.lastCollisionTime = Date.now();
+                    
+                    // Aktiv trennen statt nur Richtung umkehren
+                    this.separateEnemies(otherEnemy);
+                    
+                    // Neue Richtung wählen, nicht handleCollision verwenden
+                    if (isPositionOccupied) {
+                        this.changeDirectionAwayFromWall(isPositionOccupied);
+                        if (otherEnemy.changeDirectionAwayFromWall) {
+                            otherEnemy.changeDirectionAwayFromWall(isPositionOccupied);
+                        }
+                    }
+                    
+                    collisionDetected = true;
+                }
             }
             
             // Prüfe auch auf Kollision während der Bewegung (wenn beide in Bewegung sind)
@@ -305,19 +378,28 @@ export class Enemy {
                 const distX = Math.abs(this.mesh.position.x - otherEnemy.mesh.position.x);
                 const distZ = Math.abs(this.mesh.position.z - otherEnemy.mesh.position.z);
                 
-                // Verbesserte Kollisionserkennung mit neuem Schwellenwert
-                if (distX < CELL_SIZE * ENEMY_COLLISION_THRESHOLD && 
-                    distZ < CELL_SIZE * ENEMY_COLLISION_THRESHOLD) {
-                    console.log('Bewegungskollision zwischen Gegnern erkannt!');
-                    
-                    // Aktiv trennen
-                    this.separateEnemies(otherEnemy);
-                    
-                    // Neue Richtung bei Kollision suchen
-                    this.handleCollision(isPositionOccupied, enemies, player);
-                    otherEnemy.handleCollision(isPositionOccupied, enemies, player);
-                    
-                    collisionDetected = true;
+                // Verwende einen kleineren Kollisionsschwellwert, um zu häufige Kollisionen zu verhindern
+                const reducedThreshold = CELL_SIZE * ENEMY_COLLISION_THRESHOLD * 0.8;
+                
+                if (distX < reducedThreshold && distZ < reducedThreshold) {
+                    // Vermeide zu häufige Kollisionserkennung mit Cooldown
+                    if (!this.lastCollisionTime || Date.now() - this.lastCollisionTime > 1000) {
+                        console.log('Bewegungskollision zwischen Gegnern erkannt!');
+                        this.lastCollisionTime = Date.now();
+                        
+                        // Aktiv trennen
+                        this.separateEnemies(otherEnemy);
+                        
+                        // Neue Richtung wählen, nicht handleCollision verwenden
+                        if (isPositionOccupied) {
+                            this.changeDirectionAwayFromWall(isPositionOccupied);
+                            if (otherEnemy.changeDirectionAwayFromWall) {
+                                otherEnemy.changeDirectionAwayFromWall(isPositionOccupied);
+                            }
+                        }
+                        
+                        collisionDetected = true;
+                    }
                 }
             }
         }
@@ -327,7 +409,7 @@ export class Enemy {
     
     /**
      * Behandelt Kollisionen mit Hindernissen oder anderen Gegnern
-     * Sucht zufällig eine neue freie Bewegungsrichtung
+     * Sucht zufällig eine neue freie Bewegungsrichtung, die nicht der Richtung entspricht, aus der der Gegner kam
      * @param {Function} isPositionOccupied - Callback-Funktion zum Prüfen, ob die Zielposition belegt ist
      * @param {Array} enemies - Liste aller Gegner für Kollisionsprüfung
      * @param {Object} player - Spieler-Objekt für Kollisionsprüfung
@@ -338,17 +420,38 @@ export class Enemy {
         // Bewegung stoppen
         this.isMoving = false;
         
-        // Zufällig neue Richtung suchen, bis ein freier Rasterpunkt gefunden wird
-        const freeDirection = this.findFreeDirection(isPositionOccupied, enemies, player, true);
+        // Bestimme die Richtung, aus der der Gegner kam (entgegengesetzt zur letzten Richtung)
+        const avoidDirection = {
+            x: -this.lastDirection.x,
+            z: -this.lastDirection.z
+        };
+        
+        // Zufällig neue Richtung suchen, die nicht der Richtung entspricht, aus der der Gegner kam
+        const freeDirection = this.findFreeDirection(
+            isPositionOccupied, 
+            enemies, 
+            player, 
+            true,  // zufällige Reihenfolge
+            avoidDirection  // zu vermeidende Richtung
+        );
         
         if (freeDirection) {
             // Freie Richtung gefunden - in diese Richtung bewegen
             this.direction = { ...freeDirection };
             this.lastDirection = { ...freeDirection };
-            console.log(`Neue Richtung gefunden: x=${freeDirection.x}, z=${freeDirection.z}`);
+            console.log(`Neue Richtung nach Kollision: x=${freeDirection.x}, z=${freeDirection.z}`);
         } else {
-            // Kein freier Rasterpunkt gefunden - warten
-            console.log('Kein freier Rasterpunkt gefunden - warte...');
+            // Falls keine alternative Richtung gefunden wurde, versuche es erneut ohne Vermeidung
+            const anyDirection = this.findFreeDirection(isPositionOccupied, enemies, player, true);
+            
+            if (anyDirection) {
+                this.direction = { ...anyDirection };
+                this.lastDirection = { ...anyDirection };
+                console.log(`Notfall-Richtung gefunden: x=${anyDirection.x}, z=${anyDirection.z}`);
+            } else {
+                // Kein freier Rasterpunkt gefunden - warten
+                console.log('Kein freier Rasterpunkt gefunden - warte...');
+            }
         }
         
         // Aktuelles Feld als einziges belegtes Feld markieren
@@ -363,6 +466,11 @@ export class Enemy {
      * @returns {boolean} - true, wenn eine Kollision erkannt wurde
      */
     checkCollisionWithPlayer(player, isPositionOccupied, enemies) {
+        // Sicherheitsprüfung für ungültige Parameter
+        if (!player || !isPositionOccupied || !Array.isArray(enemies)) {
+            return false;
+        }
+        
         // Methode 1: Grid-basierte Kollisionserkennung (für präzise Raster-Positionen)
         if (player.gridX === this.gridX && player.gridZ === this.gridZ) {
             console.log('Grid-Kollision zwischen Spieler und Gegner!');
@@ -429,29 +537,48 @@ export class Enemy {
     /**
      * Kehrt die Bewegungsrichtung um
      * Wird bei Kollisionen oder Hindernissen aufgerufen
+     * Wählt zufällig eine von drei möglichen Richtungen (nicht die Richtung, aus der der Gegner kam)
      */
     reverseDirection() {
-        // In die entgegengesetzte Richtung der aktuellen Richtung bewegen
-        this.direction = {
-            x: -this.lastDirection.x,
-            z: -this.lastDirection.z
-        };
+        console.log('reverseDirection wird aufgerufen - aktuelle Richtung:', this.direction);
         
-        // Zufällige kleine Variation hinzufügen, um Verhakungen zu vermeiden
-        if (Math.random() > 0.5) {
-            this.direction.x += (Math.random() > 0.5 ? 0.1 : -0.1);
-        } else {
-            this.direction.z += (Math.random() > 0.5 ? 0.1 : -0.1);
+        // Die Richtung, aus der der Gegner kam (die wir vermeiden wollen)
+        const oppositeX = -this.lastDirection.x;
+        const oppositeZ = -this.lastDirection.z;
+        console.log('Zu vermeidende Richtung (Gegenrichtung):', { x: oppositeX, z: oppositeZ });
+        
+        // Alle vier möglichen Richtungen
+        const allDirections = [
+            { x: 1, z: 0 },   // rechts
+            { x: -1, z: 0 },  // links
+            { x: 0, z: 1 },   // unten
+            { x: 0, z: -1 }   // oben
+        ];
+        
+        // Entferne die Gegenrichtung der letzten bekannten Richtung (aus der der Gegner kam)
+        const availableDirections = allDirections.filter(dir => {
+            return !(Math.abs(dir.x - oppositeX) < 0.1 && Math.abs(dir.z - oppositeZ) < 0.1);
+        });
+        
+        console.log('Verfügbare Richtungen nach Filter:', availableDirections);
+        
+        // Überprüfung - es sollten 3 verfügbare Richtungen sein
+        if (availableDirections.length !== 3) {
+            console.warn('Unerwartete Anzahl an verfügbaren Richtungen:', availableDirections.length);
+            // Fallback: Benutze die vorhandenen (sollten immer noch mindestens 3 sein)
         }
         
-        // Richtung normalisieren
-        const length = Math.sqrt(this.direction.x * this.direction.x + this.direction.z * this.direction.z);
-        if (length > 0) {
-            this.direction.x /= length;
-            this.direction.z /= length;
-        }
+        // Wähle eine zufällige Richtung aus den verfügbaren aus
+        const randomIndex = Math.floor(Math.random() * availableDirections.length);
+        const newDirection = availableDirections[randomIndex];
         
-        // Bewegung stoppen, falls der Gegner gerade in Bewegung ist
+        // Setze die neue Richtung
+        this.direction = { ...newDirection };
+        this.lastDirection = { ...newDirection }; // Wichtig: Speichere auch die letzte Richtung
+        
+        console.log(`Neue zufällige Richtung gewählt: x=${this.direction.x}, z=${this.direction.z}`);
+        
+        // Bewegung stoppen, damit der Gegner im nächsten Frame eine neue Bewegung starten kann
         this.isMoving = false;
     }
     
@@ -484,5 +611,31 @@ export class Enemy {
         
         otherEnemy.gridX = Math.floor(otherEnemy.mesh.position.x / CELL_SIZE);
         otherEnemy.gridZ = Math.floor(otherEnemy.mesh.position.z / CELL_SIZE);
+    }
+    
+    /**
+     * Entfernt den Gegner aus der Spielwelt
+     * Wird beim Levelwechsel aufgerufen, um Memory Leaks zu verhindern
+     */
+    remove() {
+        if (this.mesh && this.gameWorld) {
+            this.gameWorld.remove(this.mesh);
+            
+            // Geometrie und Material aufräumen, um Speicher freizugeben
+            if (this.mesh.geometry) {
+                this.mesh.geometry.dispose();
+            }
+            
+            if (this.mesh.material) {
+                if (Array.isArray(this.mesh.material)) {
+                    this.mesh.material.forEach(material => material.dispose());
+                } else {
+                    this.mesh.material.dispose();
+                }
+            }
+            
+            // Referenzen entfernen
+            this.mesh = null;
+        }
     }
 } 

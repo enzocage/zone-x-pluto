@@ -169,16 +169,48 @@ export class GameController {
      * Wird vor der Generierung eines neuen Levels aufgerufen
      */
     clearLevel() {
-        // Arrays leeren und Objekte entfernen
-        this.walls.forEach(wall => wall.remove());
-        this.enemies.forEach(enemy => enemy.remove && enemy.remove());
-        this.plutoniumItems.forEach(item => item.remove());
-        this.barrels.forEach(barrel => barrel.remove());
-        this.blocks.forEach(block => block.remove());
-        this.collectibleBlocks.forEach(block => block.remove());
-        this.placedCollectibleBlocks.forEach(block => block.remove());
+        console.log('Lösche aktuelles Level...');
         
-        if (this.exit) this.gameWorld.remove(this.exit);
+        // Arrays leeren und Objekte entfernen
+        if (Array.isArray(this.walls)) {
+            this.walls.forEach(wall => wall && wall.remove && wall.remove());
+        }
+        
+        if (Array.isArray(this.enemies)) {
+            this.enemies.forEach(enemy => {
+                if (enemy && enemy.remove) {
+                    try {
+                        enemy.remove();
+                    } catch (error) {
+                        console.error('Fehler beim Entfernen eines Gegners:', error);
+                    }
+                }
+            });
+        }
+        
+        if (Array.isArray(this.plutoniumItems)) {
+            this.plutoniumItems.forEach(item => item && item.remove && item.remove());
+        }
+        
+        if (Array.isArray(this.barrels)) {
+            this.barrels.forEach(barrel => barrel && barrel.remove && barrel.remove());
+        }
+        
+        if (Array.isArray(this.blocks)) {
+            this.blocks.forEach(block => block && block.remove && block.remove());
+        }
+        
+        if (Array.isArray(this.collectibleBlocks)) {
+            this.collectibleBlocks.forEach(block => block && block.remove && block.remove());
+        }
+        
+        if (Array.isArray(this.placedCollectibleBlocks)) {
+            this.placedCollectibleBlocks.forEach(block => block && block.remove && block.remove());
+        }
+        
+        if (this.exit && this.gameWorld) {
+            this.gameWorld.remove(this.exit);
+        }
         
         // Arrays zurücksetzen
         this.walls = [];
@@ -188,6 +220,8 @@ export class GameController {
         this.blocks = [];
         this.collectibleBlocks = [];
         this.placedCollectibleBlocks = [];
+        
+        console.log('Level erfolgreich gelöscht');
     }
     
     /**
@@ -249,9 +283,26 @@ export class GameController {
      * Lässt die Gegner autonom durch das Level wandern und prüft Kollisionen mit dem Spieler
      */
     moveEnemies() {
+        // Sicherheitsprüfung, um sicherzustellen, dass die Gegner-Liste und der Spieler gültig sind
+        if (!Array.isArray(this.enemies) || !this.enemies.length || !this.player) {
+            console.error('moveEnemies: Ungültige Gegner-Liste oder Spieler fehlt', { 
+                enemiesValid: Array.isArray(this.enemies), 
+                enemiesCount: this.enemies.length,
+                playerValid: !!this.player
+            });
+            return;
+        }
+        
         // Zuerst die Bewegung aller Gegner aktualisieren
         for (const enemy of this.enemies) {
-            enemy.move(this.isPositionOccupied.bind(this), this.enemies);
+            // Stelle sicher, dass das enemy-Objekt gültig ist und die benötigten Methoden hat
+            if (!enemy || !enemy.move || !enemy.checkCollisionWithPlayer) {
+                console.error('Ungültiger Gegner in enemies-Array gefunden', enemy);
+                continue;
+            }
+            
+            // Player-Parameter explizit an die move-Methode übergeben
+            enemy.move(this.isPositionOccupied.bind(this), this.enemies, this.player);
             
             // Kollision mit Spieler prüfen
             if (enemy.checkCollisionWithPlayer(this.player, this.isPositionOccupied.bind(this), this.enemies)) {
@@ -267,17 +318,37 @@ export class GameController {
                 const enemy1 = this.enemies[i];
                 const enemy2 = this.enemies[j];
                 
+                // Sicherheitsprüfung für gültige Gegner-Objekte
+                if (!enemy1 || !enemy2 || !enemy1.mesh || !enemy2.mesh) {
+                    continue;
+                }
+                
                 // Kollidieren die Gegner miteinander?
                 const distX = Math.abs(enemy1.mesh.position.x - enemy2.mesh.position.x);
                 const distZ = Math.abs(enemy1.mesh.position.z - enemy2.mesh.position.z);
                 
-                if (distX < CELL_SIZE * ENEMY_COLLISION_THRESHOLD && 
-                    distZ < CELL_SIZE * ENEMY_COLLISION_THRESHOLD) {
-                    // Beide Gegner umdrehen lassen
-                    enemy1.reverseDirection();
-                    enemy2.reverseDirection();
-                    
-                    console.log('Gegner-Kollision in GameController erkannt!');
+                // Verwende einen reduzierten Kollisionsschwellwert, um unnötige Kollisionen zu vermeiden
+                const reducedThreshold = CELL_SIZE * ENEMY_COLLISION_THRESHOLD * 0.7;
+                
+                if (distX < reducedThreshold && distZ < reducedThreshold) {
+                    // Vermeide zu häufige Kollisionserkennung mit Timer
+                    const currentTime = Date.now();
+                    if (!enemy1.lastCollisionTime || currentTime - enemy1.lastCollisionTime > 1500) {
+                        
+                        // Neue Richtungen zuweisen, verwende die neue Methode
+                        if (enemy1.changeDirectionAwayFromWall) {
+                            enemy1.changeDirectionAwayFromWall(this.isPositionOccupied.bind(this));
+                            enemy1.lastCollisionTime = currentTime;
+                        }
+                        
+                        if (enemy2.changeDirectionAwayFromWall) {
+                            enemy2.changeDirectionAwayFromWall(this.isPositionOccupied.bind(this));
+                            enemy2.lastCollisionTime = currentTime;
+                        }
+                        
+                        // Minimale Trennung der Gegner
+                        enemy1.separateEnemies(enemy2);
+                    }
                 }
             }
         }
@@ -456,12 +527,34 @@ export class GameController {
         this.exitReached = true;
         this.levelCompleted = true;
         
+        console.log(`Level ${this.currentLevel} abgeschlossen. Lade Level ${this.currentLevel + 1}...`);
+        
         // Level-Übergang starten
         setTimeout(() => {
             this.currentLevel++;
+            
+            // Alte Gegner und Objekte explizit entfernen
+            this.clearLevel();
+            
+            // Stelle sicher, dass die Arrays zurückgesetzt werden
+            this.enemies = [];
+            this.walls = [];
+            this.plutoniumItems = [];
+            this.barrels = [];
+            this.collectibleBlocks = [];
+            this.placedCollectibleBlocks = [];
+            
+            // Neues Level generieren
             this.generateLevel(this.currentLevel);
+            
+            // UI aktualisieren
+            this.updateUI();
+            
+            // Status zurücksetzen
             this.exitReached = false;
             this.levelCompleted = false;
+            
+            console.log(`Level ${this.currentLevel} gestartet!`);
         }, 2000);
     }
     
