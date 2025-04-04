@@ -600,7 +600,7 @@ export class GameController {
     }
     
     /**
-     * Platziert einen Block an der Position, die der Spieler ZULETZT verlassen hat
+     * Platziert einen Block auf dem zuletzt eingenommenen Rasterpunkt hinter dem Spieler
      */
     placeBlock() {
         // Prüfe, ob der Spieler Blöcke hat
@@ -610,28 +610,26 @@ export class GameController {
             return;
         }
 
-        // Zielposition ist die *vorherige* Position des Spielers
-        const targetX = this.player.gridX + this.player.facingDirection.x;
-        const targetZ = this.player.gridZ + this.player.facingDirection.z; // Annahme: facingDirection hat x/z
+        // Zielposition ist die vorherige Position des Spielers
+        // (der Rasterpunkt, den der Spieler zuletzt vollständig eingenommen hat)
+        const targetX = this.previousPlayerGridX;
+        const targetZ = this.previousPlayerGridZ;
 
          // Zusätzliche Sicherheitsprüfung: Stelle sicher, dass die vorherige Position nicht die aktuelle ist
-         // (sollte durch die Update-Logik abgedeckt sein, aber sicher ist sicher)
          if (targetX === this.player.gridX && targetZ === this.player.gridZ) {
-             console.log("Platzieren fehlgeschlagen: Zielposition ist die aktuelle Spielerposition.");
+             console.log("Platzieren fehlgeschlagen: Spieler hat sich noch nicht bewegt.");
               this.soundGenerator.playError();
              return;
          }
 
-
         // Prüfe, ob die Zielposition bereits belegt ist (Wand, anderer Block, Fass, etc.)
-        // Wichtig: Nicht nur isPositionOccupied verwenden, da wir hier auch Items prüfen müssen!
         const occupiedByWall = this.walls.some(wall => wall.gridX === targetX && wall.gridZ === targetZ);
         const occupiedByPlacedBlock = this.blocks.some(block => block.gridX === targetX && block.gridZ === targetZ);
         const occupiedByCollectible = this.collectibleBlocks.some(item => !item.collected && item.gridX === targetX && item.gridZ === targetZ);
         const occupiedByPlutonium = this.plutoniumItems.some(item => !item.collected && item.gridX === targetX && item.gridZ === targetZ);
         const occupiedByBarrel = this.barrels.some(item => !item.collected && item.gridX === targetX && item.gridZ === targetZ);
         const occupiedByExit = this.exit.visible && this.exit.gridX === targetX && this.exit.gridZ === targetZ;
-        const occupiedByEnemy = this.enemies.some(enemy => enemy.gridX === targetX && enemy.gridZ === targetZ); // Prüfe auch Gegnerpositionen
+        const occupiedByEnemy = this.enemies.some(enemy => enemy.gridX === targetX && enemy.gridZ === targetZ);
 
         if (occupiedByWall || occupiedByPlacedBlock || occupiedByCollectible || occupiedByPlutonium || occupiedByBarrel || occupiedByExit || occupiedByEnemy) {
              console.log(`Platzieren fehlgeschlagen: Position (${targetX}, ${targetZ}) ist belegt.`);
