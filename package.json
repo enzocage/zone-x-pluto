@@ -5,6 +5,7 @@
   "main": "index.html",
   "type": "module",
   "scripts": {
+    "start": "vite",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"

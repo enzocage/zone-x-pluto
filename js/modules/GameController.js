@@ -529,6 +529,9 @@ export class GameController {
         
         console.log(`Level ${this.currentLevel} abgeschlossen. Lade Level ${this.currentLevel + 1}...`);
         
+        // Spiele den heroischen Level-Abschluss-Sound ab
+        this.soundGenerator.playLevelComplete();
+        
         // Level-Übergang starten
         setTimeout(() => {
             this.currentLevel++;
