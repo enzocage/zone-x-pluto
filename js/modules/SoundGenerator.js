@@ -241,10 +241,30 @@ export class SoundGenerator {
     
     /**
      * Erzeugt einen dramatischen Tick-Tack-Sound für den Plutonium-Timer
+     * Der Sound wird nun 3 Mal pro Sekunde gespielt
      * @param {number} remainingTime - Die verbleibende Zeit in Sekunden
      */
     playPlutoniumTimerTick(remainingTime) {
         if (this.muted) return;
+        
+        // Prüfe, ob dieser Aufruf ein Intervall von ca. 0.33 Sekunden trifft
+        // Wir verwenden eine Toleranz, da remainingTime eventuell nicht genau auf 0.33-Intervalle fällt
+        const subSecond = remainingTime % 1;
+        const tolerance = 0.05;
+        
+        // Wir spielen den Sound an drei Stellen pro Sekunde: 0, 0.33 und 0.66
+        const playAt = [0, 0.33, 0.66];
+        
+        // Prüfe, ob wir nahe genug an einem der Zeitpunkte sind
+        let shouldPlay = false;
+        for (const time of playAt) {
+            if (Math.abs(subSecond - time) < tolerance) {
+                shouldPlay = true;
+                break;
+            }
+        }
+        
+        if (!shouldPlay) return;
         
         const oscillator = this.audioContext.createOscillator();
         const gainNode = this.audioContext.createGain();
@@ -313,7 +333,7 @@ export class SoundGenerator {
         const oscillator = this.audioContext.createOscillator();
         const gainNode = this.audioContext.createGain();
         
-        oscillator.type = 'sawtooth';
+        oscillator.type = 'sine';
         oscillator.frequency.setValueAtTime(440, this.audioContext.currentTime);
         oscillator.frequency.exponentialRampToValueAtTime(110, this.audioContext.currentTime + 0.5);
         
@@ -329,78 +349,120 @@ export class SoundGenerator {
     
     /**
      * Erzeugt einen Sound für das Betreten des Ausgangs
-     * Spielt eine heroische Melodie mit 300% längerer Dauer
+     * Spielt die Anfangsmelodie aus Mozarts "Eine kleine Nachtmusik" (beschleunigt, höher, Sägezahn)
      */
     playLevelComplete() {
         if (this.muted) return;
         
-        // Längere Tondauer für jeden Ton (ursprünglich 0.3 Sekunden, jetzt 0.9 Sekunden)
-        const toneDuration = 0.1;
-        const totalDuration = toneDuration * 1; // Gesamtdauer eines Tons mit Ausklang
+        const now = this.audioContext.currentTime;
         
-        // Erster Ton
-        const osc1 = this.audioContext.createOscillator();
-        const gain1 = this.audioContext.createGain();
+        // Die Grundfrequenzen für die Noten der G-Dur Tonleiter (eine Oktave höher)
+        const noteFrequencies = {
+            'G4': 392.00,   // Statt G3
+            'A4': 440.00,
+            'B4': 493.88,
+            'C5': 523.25,
+            'D5': 587.33,
+            'E5': 659.25,
+            'F#5': 739.99,
+            'G5': 783.99,   // Statt G4
+            'A5': 880.00,
+            'B5': 987.77,
+            'C6': 1046.50,
+            'D6': 1174.66,
+            'E6': 1318.51,
+            'F#6': 1479.98,
+            'G6': 1567.98    // Statt G5
+        };
         
-        osc1.type = 'sine';
-        osc1.frequency.setValueAtTime(440, this.audioContext.currentTime); // A4
+        // Die Tonfolge für "Eine kleine Nachtmusik"
+        // Alle Noten eine Oktave höher und Dauern um 3x schneller (300% Beschleunigung)
+        const melody = [
+            // Aufsteigender Dreiklang
+            { note: 'G5', duration: 0.25/3 },
+            { note: 'D5', duration: 0.25/3 },
+            { note: 'G6', duration: 0.5/3 },
+            
+            // Absteigende Linie
+            { note: 'G6', duration: 0.25/3 },
+            { note: 'F#6', duration: 0.25/3 },
+            { note: 'E6', duration: 0.25/3 },
+            { note: 'D6', duration: 0.25/3 },
+            { note: 'C6', duration: 0.25/3 },
+            { note: 'B5', duration: 0.25/3 },
+            
+            // Wiederholung des Dreiklangs
+            { note: 'G5', duration: 0.25/3 },
+            { note: 'D5', duration: 0.25/3 },
+            { note: 'G6', duration: 0.5/3 },
+            
+            // Abschließende Figur
+            { note: 'D6', duration: 0.25/3 },
+            { note: 'E6', duration: 0.25/3 },
+            { note: 'F#6', duration: 0.25/3 },
+            { note: 'G6', duration: 0.5/3 }
+        ];
         
-        gain1.gain.setValueAtTime(0.3, this.audioContext.currentTime);
-        gain1.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + toneDuration);
+        // Parameter für den Sound
+        const baseVolume = 0.3;
+        let elapsedTime = 0;
         
-        osc1.connect(gain1);
-        gain1.connect(this.masterGainNode);
+        // Jeden Ton der Melodie abspielen
+        melody.forEach(note => {
+            const osc = this.audioContext.createOscillator();
+            const gainNode = this.audioContext.createGain();
+            
+            // Sägezahnkurve statt Sinuskurve
+            osc.type = 'sawtooth';
+            
+            // Die Frequenz der aktuellen Note setzen
+            osc.frequency.setValueAtTime(noteFrequencies[note.note], now + elapsedTime);
+            
+            // Lautstärke anpassen mit sanftem An- und Abschwellen
+            gainNode.gain.setValueAtTime(0, now + elapsedTime);
+            gainNode.gain.linearRampToValueAtTime(baseVolume, now + elapsedTime + 0.02);
+            gainNode.gain.setValueAtTime(baseVolume, now + elapsedTime + note.duration - 0.02);
+            gainNode.gain.linearRampToValueAtTime(0, now + elapsedTime + note.duration);
+            
+            // Verbindungen herstellen
+            osc.connect(gainNode);
+            gainNode.connect(this.masterGainNode);
+            
+            // Oszillator starten und stoppen
+            osc.start(now + elapsedTime);
+            osc.stop(now + elapsedTime + note.duration);
+            
+            // Zeit für die nächste Note vorrücken
+            elapsedTime += note.duration;
+        });
         
-        osc1.start();
-        osc1.stop(this.audioContext.currentTime + toneDuration);
+        // Einen leichten harmonischen Hintergrund hinzufügen (ebenfalls beschleunigt)
+        const harmonicIntervals = [
+            { note: 'G4', duration: elapsedTime / 2 },
+            { note: 'D5', duration: elapsedTime / 2 }
+        ];
         
-        // Zweiter Ton (höher) - Mit Verzögerung für ersten Ton
-        const osc2 = this.audioContext.createOscillator();
-        const gain2 = this.audioContext.createGain();
-        
-        osc2.type = 'sine';
-        osc2.frequency.setValueAtTime(660, this.audioContext.currentTime + totalDuration); // E5
-        
-        gain2.gain.setValueAtTime(0.3, this.audioContext.currentTime + totalDuration);
-        gain2.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + totalDuration + toneDuration);
-        
-        osc2.connect(gain2);
-        gain2.connect(this.masterGainNode);
-        
-        osc2.start(this.audioContext.currentTime + totalDuration);
-        osc2.stop(this.audioContext.currentTime + totalDuration + toneDuration);
-        
-        // Dritter Ton (noch höher) - Mit Verzögerung für ersten und zweiten Ton
-        const osc3 = this.audioContext.createOscillator();
-        const gain3 = this.audioContext.createGain();
-        
-        osc3.type = 'sine';
-        osc3.frequency.setValueAtTime(880, this.audioContext.currentTime + 2 * totalDuration); // A5
-        
-        gain3.gain.setValueAtTime(0.3, this.audioContext.currentTime + 2 * totalDuration);
-        gain3.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 2 * totalDuration + toneDuration);
-        
-        osc3.connect(gain3);
-        gain3.connect(this.masterGainNode);
-        
-        osc3.start(this.audioContext.currentTime + 2 * totalDuration);
-        osc3.stop(this.audioContext.currentTime + 2 * totalDuration + toneDuration);
-        
-        // Vierter Ton (Fanfare) - Mit Verzögerung für die ersten drei Töne
-        const osc4 = this.audioContext.createOscillator();
-        const gain4 = this.audioContext.createGain();
-        
-        osc4.type = 'square'; // Andere Wellenform für besseren Klang
-        osc4.frequency.setValueAtTime(1320, this.audioContext.currentTime + 3 * totalDuration); // E6
-        
-        gain4.gain.setValueAtTime(0.2, this.audioContext.currentTime + 3 * totalDuration);
-        gain4.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 3 * totalDuration + toneDuration * 1.5);
-        
-        osc4.connect(gain4);
-        gain4.connect(this.masterGainNode);
-        
-        osc4.start(this.audioContext.currentTime + 3 * totalDuration);
-        osc4.stop(this.audioContext.currentTime + 3 * totalDuration + toneDuration * 1.5);
+        harmonicIntervals.forEach((interval, index) => {
+            const startTime = now + index * (elapsedTime / 2);
+            
+            const osc = this.audioContext.createOscillator();
+            const gainNode = this.audioContext.createGain();
+            
+            // Auch der Begleitsound verwendet Sägezahnwellen, aber etwas leiser
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(noteFrequencies[interval.note], startTime);
+            
+            gainNode.gain.setValueAtTime(0, startTime);
+            gainNode.gain.linearRampToValueAtTime(baseVolume * 0.10, startTime + 0.05);
+            gainNode.gain.setValueAtTime(baseVolume * 0.10, startTime + interval.duration - 0.05);
+            gainNode.gain.linearRampToValueAtTime(0, startTime + interval.duration);
+            
+            osc.connect(gainNode);
+            gainNode.connect(this.masterGainNode);
+            
+            osc.start(startTime);
+            osc.stop(startTime + interval.duration);
+        });
     }
     
     /**
@@ -427,74 +489,98 @@ export class SoundGenerator {
     }
 
     /**
-     * Erzeugt einen positiven Sound, wenn das Exit-Element erscheint
+     * Erzeugt einen positiven und fröhlichen Sound, wenn das Exit-Element erscheint
+     * Der neue Sound ist melodischer mit aufsteigenden Arpeggios und einem "magischen" Gefühl
      */
     playExitAppear() {
         if (this.muted) return;
         
-        // Akkord-Effekt mit mehreren Oszillatoren für ein festliches Gefühl
+        const now = this.audioContext.currentTime;
         
-        // Hauptton (C5)
-        const osc1 = this.audioContext.createOscillator();
-        const gain1 = this.audioContext.createGain();
+        // Basis-Parameter für den Sound
+        const baseVolume = 0.25;
+        const baseDuration = 1.8;
         
-        osc1.type = 'triangle'; // Weicherer Klang
-        osc1.frequency.setValueAtTime(523.25, this.audioContext.currentTime); // C5
+        // Aufsteigendes Dur-Arpeggio in C-Dur (C, E, G, C, E, G, C)
+        const noteFrequencies = [
+            261.63, // C4
+            329.63, // E4
+            392.00, // G4
+            523.25, // C5
+            659.26, // E5
+            783.99, // G5
+            1046.50 // C6
+        ];
         
-        gain1.gain.setValueAtTime(0.4, this.audioContext.currentTime);
-        gain1.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 1.5);
+        // Spiele das Arpeggio mit verschiedenen Wellenformen
+        noteFrequencies.forEach((freq, index) => {
+            // Zeitversatz für jede Note
+            const startTime = now + index * 0.09;
+            
+            // Erstelle den Oszillator
+            const osc = this.audioContext.createOscillator();
+            const gainNode = this.audioContext.createGain();
+            
+            // Abwechselnde Wellenformen für interessanteren Klang
+            osc.type = index % 2 === 0 ? 'sine' : 'triangle';
+            osc.frequency.setValueAtTime(freq, startTime);
+            
+            // Moduliere leicht die Frequenz für einen lebendigeren Klang
+            if (index > 0) {
+                osc.frequency.setValueAtTime(freq, startTime);
+                osc.frequency.linearRampToValueAtTime(freq * 1.005, startTime + 0.15);
+                osc.frequency.linearRampToValueAtTime(freq, startTime + 0.3);
+            }
+            
+            // Höhere Noten leiser
+            const volFactor = 1.0 - (index * 0.1);
+            gainNode.gain.setValueAtTime(baseVolume * volFactor, startTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + 0.5);
+            
+            // Verbinde Oszillator mit Gain und Ausgang
+            osc.connect(gainNode);
+            gainNode.connect(this.masterGainNode);
+            
+            // Starte und stoppe den Oszillator
+            osc.start(startTime);
+            osc.stop(startTime + 0.6);
+        });
         
-        osc1.connect(gain1);
-        gain1.connect(this.masterGainNode);
+        // Füge einen "Glitzer"-Effekt mit zufälligen hohen Tönen hinzu
+        for (let i = 0; i < 12; i++) {
+            const startTime = now + 0.6 + (i * 0.08);
+            const randomFreq = 1500 + Math.random() * 1000; // Zwischen 1500-2500 Hz
+            
+            const sparkle = this.audioContext.createOscillator();
+            const sparkleGain = this.audioContext.createGain();
+            
+            sparkle.type = 'sine';
+            sparkle.frequency.setValueAtTime(randomFreq, startTime);
+            
+            sparkleGain.gain.setValueAtTime(0.05 + (Math.random() * 0.05), startTime);
+            sparkleGain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.2);
+            
+            sparkle.connect(sparkleGain);
+            sparkleGain.connect(this.masterGainNode);
+            
+            sparkle.start(startTime);
+            sparkle.stop(startTime + 0.2);
+        }
         
-        // Terz (E5)
-        const osc2 = this.audioContext.createOscillator();
-        const gain2 = this.audioContext.createGain();
+        // Abschließender tiefer "magischer" Klang
+        const finalChord = this.audioContext.createOscillator();
+        const finalGain = this.audioContext.createGain();
         
-        osc2.type = 'triangle';
-        osc2.frequency.setValueAtTime(659.26, this.audioContext.currentTime); // E5
+        finalChord.type = 'sine';
+        finalChord.frequency.setValueAtTime(130.81, now + 1.2); // C3
         
-        gain2.gain.setValueAtTime(0.3, this.audioContext.currentTime);
-        gain2.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 1.2);
+        finalGain.gain.setValueAtTime(0.2, now + 1.2);
+        finalGain.gain.exponentialRampToValueAtTime(0.001, now + baseDuration);
         
-        osc2.connect(gain2);
-        gain2.connect(this.masterGainNode);
+        finalChord.connect(finalGain);
+        finalGain.connect(this.masterGainNode);
         
-        // Quinte (G5)
-        const osc3 = this.audioContext.createOscillator();
-        const gain3 = this.audioContext.createGain();
-        
-        osc3.type = 'triangle';
-        osc3.frequency.setValueAtTime(784.99, this.audioContext.currentTime); // G5
-        
-        gain3.gain.setValueAtTime(0.25, this.audioContext.currentTime);
-        gain3.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 1.0);
-        
-        osc3.connect(gain3);
-        gain3.connect(this.masterGainNode);
-        
-        // Glitzernde Obertöne für zusätzlichen Effekt
-        const osc4 = this.audioContext.createOscillator();
-        const gain4 = this.audioContext.createGain();
-        
-        osc4.type = 'sine';
-        osc4.frequency.setValueAtTime(1046.50, this.audioContext.currentTime); // C6 (eine Oktave höher)
-        
-        gain4.gain.setValueAtTime(0.1, this.audioContext.currentTime);
-        gain4.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.8);
-        
-        osc4.connect(gain4);
-        gain4.connect(this.masterGainNode);
-        
-        // Alle Oszillatoren starten und stoppen
-        osc1.start();
-        osc2.start();
-        osc3.start();
-        osc4.start();
-        
-        osc1.stop(this.audioContext.currentTime + 1.5);
-        osc2.stop(this.audioContext.currentTime + 1.2);
-        osc3.stop(this.audioContext.currentTime + 1.0);
-        osc4.stop(this.audioContext.currentTime + 0.8);
+        finalChord.start(now + 1.2);
+        finalChord.stop(now + baseDuration);
     }
 } 
